@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
      APP_Name: str = "Lab Hacker API"
      ENV: str = "dev"
-     DATABASE_URL: str = "postgresql://lab:lab@localhost:5432/labdb"
+     DATABASE_URL: str = "postgresql+psycopg2://lab:labpass@localhost:5432/labdb"
      JWT_SECRET: str = "change"
      JWT_ALGORITHM: str = "HS256"
      JWT_EXPIRE_MINUTES: int = 60
