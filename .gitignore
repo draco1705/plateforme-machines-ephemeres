@@ -2,3 +2,6 @@
 requirements.txt
 __pycach__/
 *.pyc 
+# Virtual environments
+.venv/
+**/.venv/
