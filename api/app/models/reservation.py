@@ -12,14 +12,14 @@ class Reservation(Base):
         CheckConstraint("cpu >= 1", name="ck_reservations_cpu"),
         CheckConstraint("ram_mb >= 256", name="ck_reservations_ram"),
         CheckConstraint("end_time > start_time", name="ck_reservations_time"),
-        # Index cho Scheduler quét nhanh
+        # Index for Scheduler 
         Index("ix_reservations_status_end_time", "status", "end_time"),
         Index("ix_reservations_user_status", "user_id", "status"),
     )
     id           = Column(Integer, primary_key=True)
     user_id      = Column(Integer, ForeignKey("users.id"), nullable=False)
     machine_id   = Column(Integer, ForeignKey("machines.id"), nullable=False)
-    worker_id    = Column(Integer, ForeignKey("workers.id"), nullable=True)  # gán sau
+    worker_id    = Column(Integer, ForeignKey("workers.id"), nullable=True)  
     container_id = Column(String(100), nullable=True)
     cpu          = Column(Integer, nullable=False)
     ram_mb       = Column(Integer, nullable=False)

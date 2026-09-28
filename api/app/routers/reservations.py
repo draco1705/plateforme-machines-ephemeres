@@ -16,15 +16,15 @@ def create(payload: ReservationCreate, db: Session = Depends(get_db), user=Depen
     if not m or not m.enabled:
         raise HTTPException(404, "Machine indisponible")
 
-    # US06 : vérification des ressources minimum
+    # verification des ressources minimum
     if payload.cpu < m.cpu_min or payload.ram_mb < m.ram_min_mb:
         raise HTTPException(400, f"Minimum: {m.cpu_min} CPU / {m.ram_min_mb} MB")
 
-    # US06 : vérification de la durée
+    # verification de la duree
     if not (5 <= payload.duration_minutes <= 8 * 60):
         raise HTTPException(400, "Durée entre 5 min et 8 h")
 
-    # US06 : un seul lab actif par user (règle simple)
+    # un seul lab actif par user 
     busy = db.query(Reservation).filter(
         Reservation.user_id == user.id,
         Reservation.status.in_(["PENDING", "RUNNING"]),
@@ -41,7 +41,7 @@ def create(payload: ReservationCreate, db: Session = Depends(get_db), user=Depen
         status="PENDING",
     )
     db.add(r); db.commit(); db.refresh(r)
-    # TODO F5 : publier un message pour le Scheduler
+    # TODO  publier un message pour le Scheduler
     return r
 
 @router.get("", response_model=list[ReservationOut])
@@ -62,6 +62,6 @@ def cancel(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
         raise HTTPException(404)
     if r.status in ("EXPIRED", "CANCELLED"):
         raise HTTPException(409, "Déjà terminée")
-    r.status = "CANCELLED"   # F5 détruira le conteneur
+    r.status = "CANCELLED" 
     r.end_time = datetime.now(timezone.utc)
     db.commit()

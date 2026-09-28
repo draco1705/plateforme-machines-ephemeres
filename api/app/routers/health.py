@@ -9,8 +9,7 @@ router = APIRouter()
 @router.get("/health")
 def health(db: Session = Depends(get_db)):
     checks = {"api": "ok", "database": "unknown"}
-
-    # vérifier la connexion à la base
+    # verifier la connexion a la base
     try:
         db.execute(text("SELECT 1"))
         checks["database"] = "ok"
