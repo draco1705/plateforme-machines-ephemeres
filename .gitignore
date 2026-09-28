@@ -1,2 +1,4 @@
 .env
 requirements.txt
+__pycach__/
+*.pyc 
