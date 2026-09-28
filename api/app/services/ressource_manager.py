@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from fastapi import HTTPException
 
-class ResourceManager:
-     """ Gestion des reservations de resources"""
+class RessourceManager:
+     """ Gestion des reservations de ressources"""
      def __init__(self, db:Session):
           self.db = db 
      

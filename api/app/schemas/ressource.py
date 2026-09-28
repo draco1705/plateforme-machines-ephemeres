@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from app.schemas.common import ORMBase
 
-class ResourceUsage(ORMBase):
+class RessourceUsage(ORMBase):
      id: int 
      name: str 
      ip: str 
@@ -19,7 +19,7 @@ class ResourceUsage(ORMBase):
      container_count: int 
      can_accept: int
 
-class ResourceSummary(BaseModel):
+class RessourceSummary(BaseModel):
     total_workers: int
     workers_available: int
     workers_busy: int
@@ -35,12 +35,12 @@ class ResourceSummary(BaseModel):
     total_containers_capacity: int
     containers_running: int
 
-class ResourceReserveRequest(BaseModel):
+class RessourceReserveRequest(BaseModel):
     worker_id: int | None = None 
     cpu: int
     ram_mb: int
 
-class ResourceReleaseRequest(BaseModel):
+class RessourceReleaseRequest(BaseModel):
     worker_id: int
     cpu: int
     ram_mb: int

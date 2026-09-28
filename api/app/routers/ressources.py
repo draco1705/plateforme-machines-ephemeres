@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.worker import Worker
-from app.schemas.resource import (
-    ResourceUsage, ResourceSummary, ResourceReserveRequest, ResourceReleaseRequest,
+from app.schemas.ressource import (
+    RessourceUsage, RessourceSummary, RessourceReserveRequest, RessourceReleaseRequest,
 )
-from app.services.resource_manager import ResourceManager
+from app.services.ressource_manager import RessourceManager
 from app.core.deps import current_user
-from app.schemas.resource import WorkerStatusUpdate
+from app.schemas.ressource import WorkerStatusUpdate
 
 VALID_TRANSITIONS = {
     "AVAILABLE":   {"BUSY", "OFFLINE", "MAINTENANCE"},
@@ -18,16 +18,16 @@ VALID_TRANSITIONS = {
 
 router = APIRouter()
 
-@router.get("/", response_model=list[ResourceUsage])
-def list_resources(db: Session = Depends(get_db), _=Depends(current_user)):
+@router.get("/", response_model=list[RessourceUsage])
+def list_ressources(db: Session = Depends(get_db), _=Depends(current_user)):
     """lister les ressources disponibles par worker"""
     return db.query(Worker).order_by(Worker.id).all()
 
-@router.get("/summary", response_model=ResourceSummary)
+@router.get("/summary", response_model=RessourceSummary)
 def summary(db: Session = Depends(get_db), _=Depends(current_user)):
     """resume global des ressources du cluster"""
     workers = db.query(Worker).all()
-    return ResourceSummary(
+    return RessourceSummary(
         total_workers=len(workers),
         workers_available=sum(1 for w in workers if w.status == "AVAILABLE"),
         workers_busy=sum(1 for w in workers if w.status == "BUSY"),
@@ -42,18 +42,18 @@ def summary(db: Session = Depends(get_db), _=Depends(current_user)):
     )
 
 
-@router.get("/{worker_id}", response_model=ResourceUsage)
-def get_resource(worker_id: int, db: Session = Depends(get_db), _=Depends(current_user)):
+@router.get("/{worker_id}", response_model=RessourceUsage)
+def get_ressource(worker_id: int, db: Session = Depends(get_db), _=Depends(current_user)):
     w = db.get(Worker, worker_id)
     if not w:
         raise HTTPException(404, "Worker inconnu")
     return w
 
 
-@router.post("/reserve", response_model=ResourceUsage, status_code=201)
-def reserve(payload: ResourceReserveRequest, db: Session = Depends(get_db), _=Depends(current_user)):
+@router.post("/reserve", response_model=RessourceUsage, status_code=201)
+def reserve(payload: RessourceReserveRequest, db: Session = Depends(get_db), _=Depends(current_user)):
     """reserver des ressources sur un worker (auto-select si worker_id=None)"""
-    mgr = ResourceManager(db)
+    mgr = RessourceManager(db)
     worker = mgr.reserve(
         worker_id=payload.worker_id,
         cpu=payload.cpu,
@@ -62,10 +62,10 @@ def reserve(payload: ResourceReserveRequest, db: Session = Depends(get_db), _=De
     return worker
 
 
-@router.post("/release", response_model=ResourceUsage)
-def release(payload: ResourceReleaseRequest, db: Session = Depends(get_db), _=Depends(current_user)):
+@router.post("/release", response_model=RessourceUsage)
+def release(payload: RessourceReleaseRequest, db: Session = Depends(get_db), _=Depends(current_user)):
     """liberer des ressources"""
-    mgr = ResourceManager(db)
+    mgr = RessourceManager(db)
     worker = mgr.release(
         worker_id=payload.worker_id,
         cpu=payload.cpu,
@@ -73,7 +73,7 @@ def release(payload: ResourceReleaseRequest, db: Session = Depends(get_db), _=De
     )
     return worker
 
-@router.patch("/{worker_id}/status", response_model=ResourceUsage)
+@router.patch("/{worker_id}/status", response_model=RessourceUsage)
 def update_status(worker_id: int, payload: WorkerStatusUpdate, db: Session = Depends(get_db), user = Depends(current_user)):
      """mettre a jour manellement le status (admin only)"""
      if user.role != "admin":
