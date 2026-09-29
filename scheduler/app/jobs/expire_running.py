@@ -3,6 +3,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.reservation import Reservation
 from app.models.worker import Worker
+from app.services.container_manager import ContainerManager, ContainerError
 
 def expire_running(batch_size: int = 20) -> int:
      """Expire jusqu'a batch_size reservations RUNNING. Retourne le nombre de reservations expirees."""
@@ -23,7 +24,18 @@ def expire_running(batch_size: int = 20) -> int:
           expired = db.execute(stmt).scalars().all()
           if not expired:
                return 0
+          try:
+            cmgr = ContainerManager()
+          except ContainerError as e:
+            print(f"[scheduler] Docker indisponible: {e.message} — skip expire")
+            return 0
           for r in expired:
+                # supprimer le conteneur Docker
+               if r.container_id:
+                    try:
+                         cmgr.remove_container(r.container_id)
+                    except ContainerError as e:
+                         print(f"[scheduler] reservation #{r.id} — remove échoué: {e.message}")
                # Liberer les ressources du Worker
                if r.worker_id is not None:
                     worker = db.get(Worker, r.worker_id)

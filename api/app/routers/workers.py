@@ -47,7 +47,8 @@ def get_worker(wid: int, db: Session = Depends(get_db), _=Depends(current_user))
     return w
 
 def _mark_offline(db: Session, timeout_s: int = 30):
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_s)
-    db.query(Worker).filter(Worker.last_heartbeat < cutoff)\
-                    .update({"status": "OFFLINE"})
-    db.commit()
+    pass
+    # cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_s)
+    # db.query(Worker).filter(Worker.last_heartbeat < cutoff)\
+    #                 .update({"status": "OFFLINE"})
+    # db.commit()

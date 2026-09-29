@@ -3,6 +3,9 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.reservation import Reservation
 from app.services.ressource_manager import RessourceError, RessourceManager
+from app.services.container_manager import ContainerManager, ContainerError
+from app.models.machine import Machine
+from app.models.worker import Worker
 
 def process_pending(batch_size: int = 10) -> int:
      "Traiter jusqu'a batch_size reservations PENDING"
@@ -22,6 +25,12 @@ def process_pending(batch_size: int = 10) -> int:
           if not pending:
                return 0
           mgr = RessourceManager(db)
+          try:
+               cmgr = ContainerManager()
+          except ContainerError as e:
+               print(f"[scheduler] Docker indisponible: {e.message} — skip cycle")
+               return 0
+
           for r in pending:
                # Reservation deja expiree avant meme d'etre traitee
                if r.end_time <= now:
@@ -33,6 +42,19 @@ def process_pending(batch_size: int = 10) -> int:
                     # Pas de ressource, reste PENDING (file d'attente)
                     print(f"[scheduler] reservation #{r.id} aucun worker disponible, reste PENDING")
                     continue
+
+               machine = db.get(Machine, r.machine_id)
+               if machine is None:
+                    r.status = "FAILED"
+                    print(f"[scheduler] reservation #{r.id} — machine introuvable")
+                    continue
+               # creer le conteneur Docker
+               try:
+                    container_id = cmgr.create_container(r, machine)
+               except ContainerError as e:
+                    print(f"[scheduler] reservation #{r.id} — création conteneur échouée: {e.message}")
+                    r.status = "FAILED"
+                    continue
                try:
                     worker.cpu_used += r.cpu
                     worker.ram_used_mb += r.ram_mb
@@ -41,6 +63,8 @@ def process_pending(batch_size: int = 10) -> int:
                     if(worker.cpu_used >= worker.cpu_total or worker.ram_used_mb >= worker.ram_total_mb or worker.container_count >= worker.max_containers):
                          worker.status = "BUSY"
                     r.worker_id = worker.id
+                    r.container_id = container_id
+                    r.access_url = f"http://lab-{r.id}.lab.local"
                     r.status = "RUNNING"
                     print(
                          f"[scheduler] reservation #{r.id} PENDING → RUNNING "

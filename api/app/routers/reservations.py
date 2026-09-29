@@ -65,3 +65,26 @@ def cancel(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
     r.status = "CANCELLED" 
     r.end_time = datetime.now(timezone.utc)
     db.commit()
+
+@router.post("/{rid}/start", response_model=ReservationOut)
+def start_reservation(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
+    """redemarrer le conteneur une reservation."""
+    r = db.get(Reservation, rid)
+    if not r or r.user_id != user.id:
+        raise HTTPException(404)
+    if r.status != "RUNNING" or not r.container_id:
+        raise HTTPException(409, "Réservation non active")
+    # TODO appeler Worker Agent
+    return r
+
+
+@router.post("/{rid}/stop", response_model=ReservationOut)
+def stop_reservation(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
+    """arreter le conteneur sans le supprimer."""
+    r = db.get(Reservation, rid)
+    if not r or r.user_id != user.id:
+        raise HTTPException(404)
+    if r.status != "RUNNING":
+        raise HTTPException(409, "Réservation non active")
+    # TODO appeler Worker Agent
+    return r

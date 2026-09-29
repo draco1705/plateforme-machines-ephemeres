@@ -28,9 +28,9 @@ def main():
           
           # Machine
           machines = [
-               {"name": "kali",    "image": "kalilinux/kali-rolling", "cpu_min": 1, "ram_min_mb": 512,  "port": 22},
-               {"name": "ubuntu",  "image": "ubuntu:22.04",           "cpu_min": 1, "ram_min_mb": 512,  "port": 22},
-               {"name": "parrot",  "image": "parrotsec/security",     "cpu_min": 2, "ram_min_mb": 1024, "port": 22},
+               {"name": "kali", "image": "kalilinux/kali-rolling", "cpu_min": 1, "ram_min_mb": 512,  "port": 22},
+               {"name": "ubuntu", "image": "ubuntu:22.04", "cpu_min": 1, "ram_min_mb": 512,  "port": 22},
+               {"name": "alpine", "image": "alpine:3.19", "cpu_min": 1, "ram_min_mb": 256,  "port": 22},
           ]
           for m in machines:
                if not db.query(Machine).filter_by(name=m["name"]).first():
