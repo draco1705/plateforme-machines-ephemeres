@@ -7,6 +7,7 @@ from app.models.reservation import Reservation
 from app.models.machine import Machine
 from app.schemas.reservation import ReservationCreate, ReservationOut
 from app.core.deps import current_user
+from app.services.reservation_events import log_event
 
 router = APIRouter()
 
@@ -40,8 +41,11 @@ def create(payload: ReservationCreate, db: Session = Depends(get_db), user=Depen
         end_time=now + timedelta(minutes=payload.duration_minutes),
         status="PENDING",
     )
-    db.add(r); db.commit(); db.refresh(r)
-    # TODO  publier un message pour le Scheduler
+    db.add(r)
+    db.flush()
+    log_event(db, r.id, from_status=None, to_status="PENDING", reason="created_by_user")
+    db.commit()
+    db.refresh(r)
     return r
 
 @router.get("", response_model=list[ReservationOut])
@@ -64,6 +68,7 @@ def cancel(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
         raise HTTPException(409, "Déjà terminée")
     r.status = "CANCELLED" 
     r.end_time = datetime.now(timezone.utc)
+    log_event(db, r.id, from_status=old_status, to_status="CANCELLED", reason="user_cancelled")
     db.commit()
 
 @router.post("/{rid}/start", response_model=ReservationOut)
@@ -76,7 +81,6 @@ def start_reservation(rid: int, db: Session = Depends(get_db), user=Depends(curr
         raise HTTPException(409, "Réservation non active")
     # TODO appeler Worker Agent
     return r
-
 
 @router.post("/{rid}/stop", response_model=ReservationOut)
 def stop_reservation(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
