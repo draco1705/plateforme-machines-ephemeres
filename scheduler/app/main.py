@@ -1,10 +1,11 @@
 import signal
 import sys
 import time
-
 from app.config import settings
 from app.jobs.process_pending import process_pending
 from app.jobs.expire_running import expire_running
+from app.jobs.cancel_running import cancel_running
+from app.jobs.expire_pending import expire_pending_timeout
 
 _shutdown = False
 
@@ -27,7 +28,8 @@ def run_loop():
           try:
                n_run = process_pending(settings.BATCH_SIZE)
                n_exp = expire_running(settings.BATCH_SIZE * 2)
-
+               n_can = cancel_running(settings.BATCH_SIZE * 2)
+               n_stuck = expire_pending_timeout()
                if n_run or n_exp:
                     print(f"[scheduler] cycle #{tick}: {n_run} démarrées, {n_exp} expirées")
           except Exception as e:

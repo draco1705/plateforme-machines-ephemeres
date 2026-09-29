@@ -31,3 +31,11 @@ class ReservationSummary(ORMBase):
     status: ReservationStatus
     end_time: datetime
     access_url: str | None
+
+class ReservationEventOut(ORMBase):
+    id: int
+    reservation_id: int
+    from_status: str | None
+    to_status: str
+    reason: str | None
+    created_at: datetime

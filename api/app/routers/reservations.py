@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.reservation import Reservation
 from app.models.machine import Machine
-from app.schemas.reservation import ReservationCreate, ReservationOut
+from app.schemas.reservation import ReservationCreate, ReservationOut, ReservationEventOut
 from app.core.deps import current_user
 from app.services.reservation_events import log_event
-
+from app.models.reservation_event import ReservationEvent
 router = APIRouter()
 
 @router.post("", response_model=ReservationOut, status_code=201)
@@ -66,6 +66,7 @@ def cancel(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
         raise HTTPException(404)
     if r.status in ("EXPIRED", "CANCELLED"):
         raise HTTPException(409, "Déjà terminée")
+    old_status = r.status
     r.status = "CANCELLED" 
     r.end_time = datetime.now(timezone.utc)
     log_event(db, r.id, from_status=old_status, to_status="CANCELLED", reason="user_cancelled")
@@ -92,3 +93,18 @@ def stop_reservation(rid: int, db: Session = Depends(get_db), user=Depends(curre
         raise HTTPException(409, "Réservation non active")
     # TODO appeler Worker Agent
     return r
+
+@router.get("/{rid}/events", response_model=list[ReservationEventOut])
+def get_events(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
+    """voir l'historique complet d'une reservation."""
+    r = db.get(Reservation, rid)
+    if not r or r.user_id != user.id:
+        raise HTTPException(404)
+
+    events = (
+        db.query(ReservationEvent)
+        .filter_by(reservation_id=rid)
+        .order_by(ReservationEvent.created_at.asc())
+        .all()
+    )
+    return events
