@@ -38,6 +38,58 @@ class ContainerManager:
                 self.client.images.pull(machine.image)
             except APIError as e:
                 raise ContainerError(f"Image {machine.image} introuvable: {e}", "IMAGE_NOT_FOUND")
+        # commande HTTP server pour que Traefik puisse router python http.server écoute sur port 80
+        # if "alpine" in machine.image:
+        #     # Alpine : python3 + nc fallback
+        #     cmd = ["sh", "-c", f"while true; do echo \"Hello from lab-{reservation.id} on alpine\" | nc -l -p 80; done"]
+        # else:
+            # cmd = ["sh", "-c",
+            #     f"python3 -m http.server 80 2>/dev/null || "
+            #     f"(echo 'Hello from lab-{reservation.id}' > /tmp/index.html && "
+            #     f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\n'; "
+            #     f"cat /tmp/index.html) | nc -l -p 80 -q 1; done)"]
+
+        if "nginx" in machine.image:
+            cmd = None  # Giữ nguyên entrypoint mặc định của Nginx để tự phục vụ port 80
+        elif "alpine" in machine.image:
+            cmd = [
+                "sh", "-c",
+                f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\nHello from lab-{reservation.id} on alpine') | nc -l -p 80; done"
+            ]
+        else:
+            cmd = [
+                "sh", "-c",
+                f"if command -v python3 >/dev/null 2>&1; then "
+                f"python3 -m http.server 80; "
+                f"else "
+                f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\nHello from lab-{reservation.id}') | nc -l -p 80; done; "
+                f"fi"
+            ]
+
+        labels = {
+            # Activer Traefik
+            "traefik.enable": "true",
+            "traefik.docker.network": "lab-net",
+
+            # Router pour cette reservation
+            f"traefik.http.routers.lab-{reservation.id}.rule":
+                f"Host(`lab-{reservation.id}.lab.local`)",
+            f"traefik.http.routers.lab-{reservation.id}.entrypoints":
+                "websecure",
+            f"traefik.http.routers.lab-{reservation.id}.tls": "true",
+            f"traefik.http.routers.lab-{reservation.id}.middlewares":
+                "security-headers@file",
+
+            # Service pour cette reservation
+            f"traefik.http.services.lab-{reservation.id}.loadbalancer.server.port":
+                "80",
+
+            # Metadonnées
+            "lab.reservation_id": str(reservation.id),
+            "lab.user_id":        str(reservation.user_id),
+            "lab.machine":        machine.name,
+            "lab.expires_at":     reservation.end_time.isoformat(),
+        }
         # Config du conteneur
         try:
             container = self.client.containers.run(
@@ -46,25 +98,13 @@ class ContainerManager:
                 detach=True,                              
                 mem_limit=f"{reservation.ram_mb}m",       
                 nano_cpus=int(reservation.cpu * 1e9),     
-                network="bridge",                        
-                labels={
-                    # Traefik utilisera ces labels
-                    "traefik.enable": "true",
-                    "traefik.http.routers.lab-{}.rule".format(reservation.id):
-                        f"Host(`lab-{reservation.id}.lab.local`)",
-                    "traefik.http.services.lab-{}.loadbalancer.server.port".format(reservation.id):
-                        str(machine.port),
-                    # Metadonnees utiles
-                    "lab.reservation_id": str(reservation.id),
-                    "lab.user_id":        str(reservation.user_id),
-                    "lab.machine":        machine.name,
-                    "lab.expires_at":     reservation.end_time.isoformat(),
-                },
+                network="lab-net",                        
+                labels=labels,
                 # Commande : garder le conteneur vivant
-                command=["sleep", "infinity"],
+                command=cmd,
                 restart_policy={"Name": "unless-stopped"},
             )
-            print(f"[container] created {container_name} (id={container.id[:12]})")
+            print(f"[container] created {container_name} (id={container.id[:12]}) url=https://lab-{reservation.id}.lab.local")
             return container.id
 
         except APIError as e:

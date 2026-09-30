@@ -1,6 +1,38 @@
-.env
-__pycach__/
-*.pyc 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.log
+
 # Virtual environments
 .venv/
 **/.venv/
+
+# Env files (secrets!)
+.env
+*.env
+!.env.example
+!.env.exemple
+
+# Certs (générés localement)
+certs/*.crt
+certs/*.key
+!certs/.gitkeep
+
+# Database local
+*.db
+*.sqlite3
+pgdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

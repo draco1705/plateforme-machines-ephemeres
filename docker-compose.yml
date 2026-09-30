@@ -12,10 +12,60 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lab -d labdb"]
+      test: [ "CMD-SHELL", "pg_isready -U lab -d labdb" ]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - lab-net
 
+  traefik:
+    image: traefik:v3.6.2
+    container_name: lab-traefik
+    restart: unless-stopped
+    command:
+      # Docker Provider
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=lab-net"
+
+      # Dynamic file provider (TLS)
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Redirection HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+
+      # Dashboard
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+
+      # Logs
+      - "--log.level=INFO"
+      - "--accesslog=true"
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"    
+      - "./certs:/certs:ro"
+      - "./traefik-dynamic:/etc/traefik/dynamic:ro"
+
+    networks:
+      - lab-net
 volumes:
   pgdata:
+
+networks:
+  lab-net:
+    name: lab-net
+    driver: bridge
