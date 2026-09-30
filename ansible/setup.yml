@@ -1,0 +1,86 @@
+---
+- name: Setup Docker and Environment
+  hosts: cluster
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    - name: Install docker-compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Ensure vagrant user is in docker group
+      user:
+        name: vagrant
+        groups: docker
+        append: yes
+
+- name: Deploy Controller Components
+  hosts: controllers
+  become: yes
+  tasks:
+    - name: Copy project files
+      copy:
+        src: ../
+        dest: /opt/labhacker/
+        owner: vagrant
+        group: vagrant
+
+    - name: Start services on controller
+      command: docker-compose up -d
+      args:
+        chdir: /opt/labhacker/
+      
+- name: Deploy Worker Agent
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Install psutil and docker SDK for python
+      pip:
+        name:
+          - psutil
+          - requests
+          - docker
+        executable: pip3
+
+    - name: Copy worker agent script
+      copy:
+        src: ../worker_agent/agent.py
+        dest: /opt/worker_agent.py
+        owner: vagrant
+        mode: '0755'
+
+    - name: Start worker agent (nohup)
+      shell: nohup python3 /opt/worker_agent.py > /var/log/worker_agent.log 2>&1 &
+      async: 10
+      poll: 0
