@@ -11,7 +11,7 @@ __pycache__/
 
 # Env files (secrets!)
 .env
-*.env
+**/.env
 !.env.example
 !.env.exemple
 
@@ -36,3 +36,5 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+test.txt
