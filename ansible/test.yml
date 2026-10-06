@@ -1,0 +1,221 @@
+---
+- name: Setup Docker and Environment
+  hosts: cluster
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - rsync
+        state: present
+
+    - name: Create /etc/apt/keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu
+          {{ ansible_distribution_release }} stable
+        state: present
+        filename: docker
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    # - name: Install docker compose
+    #   get_url:
+    #     url: https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64
+    #     dest: /usr/local/bin/docker-compose
+    #     mode: '0755'
+    
+    - name: Install Docker Compose plugin
+      apt:
+        name: docker-compose-plugin
+        state: present
+    
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ensure vagrant user is in docker group
+      user:
+        name: vagrant
+        groups: docker
+        append: yes
+
+- name: Deploy Controller Components
+  hosts: controllers
+  become: true
+
+  vars:
+    project_dir: /opt/labhacker
+
+  tasks:
+    - name: Create project base directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Sync project files to controller
+      synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ project_dir }}/"
+        rsync_opts:
+          - "--chown=vagrant:vagrant"
+          - "--exclude=.venv"
+          - "--exclude=**/.venv"
+          - "--exclude=__pycache__"
+          - "--exclude=**/__pycache__"
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--exclude=infra/vagrant/.vagrant"
+        delete: false
+        rsync_path: "sudo rsync"
+
+    - name: Create .env file for Controller
+      copy:
+        dest: "{{ project_dir }}/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@lab-postgres:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+          LAB_NETWORK=lab-net
+          DOCKER_SOCKET=/var/run/docker.sock
+
+    - name: Start services on controller
+      command:
+        cmd: docker compose up -d
+        chdir: "{{ project_dir }}"
+      become_user: vagrant
+      register: compose_result
+      changed_when: >-
+        ('Created' in compose_result.stdout or 'Created' in compose_result.stderr) or
+        ('Started' in compose_result.stdout or 'Started' in compose_result.stderr) or
+        ('Recreated' in compose_result.stdout or 'Recreated' in compose_result.stderr)
+
+    # - name: Wait for Postgres to be ready
+    #   shell: |
+    #     for i in {1..30}; do
+    #       status=$(docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres 2>/dev/null)
+    #       if [ "$status" = "healthy" ]; then
+    #         echo "healthy"
+    #         exit 0
+    #       fi
+    #       sleep 2
+    #     done
+    #     echo "timeout"
+    #     exit 1
+    #   become_user: vagrant
+    #   register: pg_wait
+    #   changed_when: false
+    #   failed_when: pg_wait.stdout | trim != "healthy"
+
+    - name: Wait for Postgres to be healthy
+      command:
+        cmd: docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres
+      become_user: vagrant
+      register: pg_health
+      until: pg_health.stdout | trim == "healthy"
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: false
+
+
+    - name: Check running containers
+      command:
+        cmd: docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
+      become_user: vagrant
+      register: containers
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        var: containers.stdout_lines
+      
+- name: Deploy Worker Agent
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Install psutil and docker SDK for python
+      pip:
+        name:
+          - psutil
+          - requests
+          - docker
+        executable: pip3
+
+    - name: Copy worker agent script
+      copy:
+        src: ../worker_agent/agent.py
+        dest: /opt/worker_agent.py
+        owner: vagrant
+        mode: '0755'
+
+    # - name: Start worker agent (nohup)
+    #   shell: nohup python3 /opt/worker_agent.py > /var/log/worker_agent.log 2>&1 &
+    #   async: 10
+    #   poll: 0
+
+    - name: Create Systemd service for Worker Agent
+      copy:
+        dest: /etc/systemd/system/worker-agent.service
+        content: |
+          [Unit]
+          Description=Lab Hacker Worker Agent Daemon
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt
+          ExecStart=/usr/bin/python3 /opt/worker_agent.py
+          Restart=always
+          RestartSec=5
+          Environment=CONTROLLER_URL=http://192.168.56.10:8000
+          Environment=WORKER_HOSTNAME={{ inventory_hostname }}
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd, enable and start Worker Agent
+      systemd:
+        name: worker-agent
+        daemon_reload: yes
+        state: restarted
+        enabled: yes
