@@ -1,0 +1,14 @@
+[lint]
+ignore = [
+    "B008", # Function call in default argument (used extensively for FastAPI Depends)
+    "BLE001", # Blind exception catching
+    "F401", # Unused imports (if any)
+    "F841", # Unused variables
+    "F541", # F-string without placeholders
+    "ISC004", # Implicit string concatenation
+    "RUF022", # Unsorted __all__
+]
+exclude = [
+    ".venv",
+    "migration",
+]

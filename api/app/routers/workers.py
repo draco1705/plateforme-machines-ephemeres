@@ -1,11 +1,13 @@
 # app/routers/workers.py
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.core.deps import current_user
 from app.database import get_db
 from app.models.worker import Worker
-from app.schemas.worker import WorkerRegister, WorkerHeartbeat, WorkerOut
-from app.core.deps import current_user
+from app.schemas.worker import WorkerHeartbeat, WorkerOut, WorkerRegister
 
 router = APIRouter()
 

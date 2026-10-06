@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func, Index
 from app.database import Base
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, func
 
 
 class ReservationEvent(Base):

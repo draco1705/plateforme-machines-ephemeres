@@ -1,11 +1,10 @@
 # app/main.py
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.database import Base, engine
-from app.routers import users, machines, reservations, workers, health, ressources
-from app.exceptions import register_exception_handlers
 
+from app.config import settings
+from app.exceptions import register_exception_handlers
+from app.routers import health, machines, reservations, ressources, users, workers
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 

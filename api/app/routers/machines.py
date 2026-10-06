@@ -1,10 +1,11 @@
 # app/routers/machines.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.core.deps import current_user
 from app.database import get_db
 from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineOut
-from app.core.deps import current_user
 
 router = APIRouter()
 

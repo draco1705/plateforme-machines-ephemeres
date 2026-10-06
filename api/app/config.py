@@ -1,6 +1,7 @@
 # api/app/config.py
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
      APP_NAME: str = "Lab Hacker API"
      ENV: str = "dev"

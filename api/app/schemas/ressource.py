@@ -1,5 +1,7 @@
 from pydantic import BaseModel
+
 from app.schemas.common import ORMBase
+
 
 class RessourceUsage(ORMBase):
      id: int 

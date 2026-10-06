@@ -1,23 +1,19 @@
-import sys
-import os
 import datetime
+import os
+import sys
 
 sys.path.insert(0, os.path.abspath('api'))
 
+from app.core.security import hash_password
+from app.database import Base, get_db
+from app.main import app
+from app.models.machine import Machine
+from app.models.user import User
+from app.models.worker import Worker
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.main import app
-from app.database import Base, get_db
-from app.models.worker import Worker
-from app.models.machine import Machine
-from app.models.user import User
-from app.models.reservation import Reservation
-from app.models.reservation_event import ReservationEvent
-
-from app.core.security import hash_password
 
 SQLALCHEMY_DATABASE_URL = 'sqlite:///:memory:'
 engine = create_engine(
@@ -39,7 +35,7 @@ for table in Base.metadata.sorted_tables:
             col.server_default = None
 
 def set_created_at(mapper, connection, target):
-    if hasattr(target, 'created_at') and getattr(target, 'created_at') is None:
+    if hasattr(target, 'created_at') and target.created_at is None:
         target.created_at = datetime.datetime.now(datetime.timezone.utc)
 
 for mapper in Base.registry.mappers:

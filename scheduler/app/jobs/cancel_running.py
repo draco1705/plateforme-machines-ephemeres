@@ -1,8 +1,8 @@
-from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.reservation import Reservation
 from app.models.worker import Worker
-from app.services.container_manager import ContainerManager, ContainerError
+from app.services.container_manager import ContainerError, ContainerManager
+from sqlalchemy import select
 
 
 def cancel_running(batch_size: int = 20) -> int:

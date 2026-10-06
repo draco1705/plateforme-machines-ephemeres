@@ -1,8 +1,9 @@
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select
+from datetime import datetime, timedelta, timezone
+
 from app.database import SessionLocal
 from app.models.reservation import Reservation
 from app.services.reservation_events import log_event
+from sqlalchemy import select
 
 MAX_PENDING_MINUTES = 30
 

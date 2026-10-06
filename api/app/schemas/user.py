@@ -1,7 +1,10 @@
 # app/schemas/user.py
 from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
+
 from app.schemas.common import ORMBase
+
 
 class UserCreate(BaseModel):
     email: EmailStr

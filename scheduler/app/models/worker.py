@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, Index, CheckConstraint
 from app.database import Base
+from sqlalchemy import CheckConstraint, Column, DateTime, Integer, String, func
+
 
 class Worker(Base):
     __tablename__ = "workers"

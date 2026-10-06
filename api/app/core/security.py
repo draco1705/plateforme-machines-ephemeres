@@ -1,7 +1,9 @@
 # api/app/core/security.py
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
+
 from jose import jwt
+from passlib.context import CryptContext
+
 from app.config import settings
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")

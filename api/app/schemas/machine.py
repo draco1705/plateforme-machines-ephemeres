@@ -1,7 +1,10 @@
 # app/schemas/machine.py
 from datetime import datetime
+
 from pydantic import BaseModel, Field
+
 from app.schemas.common import ORMBase
+
 
 class MachineCreate(BaseModel):
     name: str = Field(min_length=2, max_length=80)

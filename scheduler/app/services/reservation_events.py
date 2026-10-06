@@ -1,5 +1,6 @@
-from sqlalchemy.orm import Session
 from app.models.reservation_event import ReservationEvent
+from sqlalchemy.orm import Session
+
 
 def log_event(
     db: Session,
