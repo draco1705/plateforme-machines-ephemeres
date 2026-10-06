@@ -112,6 +112,9 @@ jobs:
     needs: [docker-build-and-scan]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
