@@ -17,6 +17,8 @@ from app.models.user import User
 from app.models.reservation import Reservation
 from app.models.reservation_event import ReservationEvent
 
+from app.core.security import hash_password
+
 SQLALCHEMY_DATABASE_URL = 'sqlite:///:memory:'
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
@@ -58,7 +60,7 @@ client = TestClient(app)
 def setup_db():
     db = TestingSessionLocal()
     # Add admin user as well for admin tests
-    admin_user = User(email='admin@lab.local', password_hash='$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', role='admin')
+    admin_user = User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin')
     db.add(admin_user)
     w = Worker(name='worker_test', ip='10.0.0.99', cpu_total=8, ram_total_mb=8192, cpu_used=0, ram_used_mb=0, max_containers=20, container_count=0, status='AVAILABLE')
     db.add(w)
@@ -98,12 +100,15 @@ def test_instances_machines():
     # Login admin
     resp = client.post('/users/login', data=login_data)
     if resp.status_code != 200:
-        # Create admin user if not exists via DB or registration
+        # Create or update admin user if not exists or password mismatched
         db = TestingSessionLocal()
-        if not db.query(User).filter_by(email='admin@lab.local').first():
-            from app.core.security import hash_password
+        admin = db.query(User).filter_by(email='admin@lab.local').first()
+        if not admin:
             db.add(User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin'))
-            db.commit()
+        else:
+            admin.password_hash = hash_password('admin12345')
+            admin.role = 'admin'
+        db.commit()
         db.close()
         resp = client.post('/users/login', data=login_data)
     
