@@ -57,7 +57,7 @@ if (-not (Test-Path ".env")) {
         Write-Host ".env.example not found - creating default" -ForegroundColor Yellow
 
         @(
-            "DATABASE_URL=postgresql+psycopg2://lab:labpass@127.0.0.1:5432/labdb"
+            "DATABASE_URL=postgresql+pg8000://lab:labpass@127.0.0.1:5432/labdb"
             "JWT_SECRET=change-me-in-production"
             "JWT_ALGORITHM=HS256"
             "JWT_EXPIRE_MINUTES=60"
@@ -105,7 +105,7 @@ foreach ($service in @("api", "scheduler")) {
     $venvPath = "$service\.venv"
     Write-Host "  * $service..."
     if (-not (Test-Path $venvPath)) {
-        python -m venv $venvPath
+        C:\Users\Admin\AppData\Local\Programs\Python\Python311\python.exe -m venv $venvPath
         if ($LASTEXITCODE -ne 0) {
             Write-Host "failed to create venv" -ForegroundColor Red
             exit 1
@@ -123,7 +123,11 @@ Write-Host ""
 Write-Host "> [5/7] Installing Python dependencies..." -ForegroundColor Yellow
 
 foreach ($service in @("api", "scheduler")) {
-    $py  = ".\$service\.venv\Scripts\python.exe"
+    if (Test-Path ".\$service\.venv\Scripts\python.exe") {
+        $py = ".\$service\.venv\Scripts\python.exe"
+    } else {
+        $py = ".\$service\.venv\bin\python.exe"
+    }
     $req = "$service\requirements.txt"
 
     if (Test-Path $req) {
@@ -189,7 +193,11 @@ Write-Host "> [7/7] Migrations and seed..." -ForegroundColor Yellow
 
 Push-Location api
 
-$apiPython = ".\.venv\Scripts\python.exe"
+if (Test-Path ".\.venv\Scripts\python.exe") {
+    $apiPython = ".\.venv\Scripts\python.exe"
+} else {
+    $apiPython = ".\.venv\bin\python.exe"
+}
 
 Write-Host "  ... alembic upgrade head..." -ForegroundColor Gray
 & $apiPython -m alembic upgrade head
@@ -223,12 +231,12 @@ Write-Host "Start the services in 2 terminals:" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Terminal 1 - API :" -ForegroundColor White
 Write-Host "    cd api" -ForegroundColor Gray
-Write-Host "    .\.venv\Scripts\Activate.ps1" -ForegroundColor Gray
+Write-Host "    .\.venv\Scripts\Activate.ps1 (or .\.venv\bin\Activate.ps1)" -ForegroundColor Gray
 Write-Host "    uvicorn app.main:app --reload" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Terminal 2 - Scheduler :" -ForegroundColor White
 Write-Host "    cd scheduler" -ForegroundColor Gray
-Write-Host "    .\.venv\Scripts\Activate.ps1" -ForegroundColor Gray
+Write-Host "    .\.venv\Scripts\Activate.ps1 (or .\.venv\bin\Activate.ps1)" -ForegroundColor Gray
 Write-Host "    python -m app.main" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Then open:" -ForegroundColor Cyan

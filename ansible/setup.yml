@@ -60,6 +60,28 @@
       command: docker-compose up -d
       args:
         chdir: /opt/labhacker/
+
+    - name: Install API and Scheduler dependencies
+      pip:
+        requirements: /opt/labhacker/{{ item }}/requirements.txt
+        executable: pip3
+      loop:
+        - api
+        - scheduler
+
+    - name: Start API
+      shell: nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /var/log/api.log 2>&1 &
+      args:
+        chdir: /opt/labhacker/api
+      async: 10
+      poll: 0
+
+    - name: Start Scheduler
+      shell: nohup python3 -m app.main > /var/log/scheduler.log 2>&1 &
+      args:
+        chdir: /opt/labhacker/scheduler
+      async: 10
+      poll: 0
       
 - name: Deploy Worker Agent
   hosts: workers

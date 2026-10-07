@@ -20,10 +20,10 @@ def get_ip():
 
 def register_worker():
     payload = {
-        "id": WORKER_ID,
+        "name": WORKER_ID,
         "ip": get_ip(),
-        "cpu": psutil.cpu_count(),
-        "ram": psutil.virtual_memory().total
+        "cpu_total": psutil.cpu_count(),
+        "ram_total_mb": int(psutil.virtual_memory().total / (1024 * 1024))
     }
     while True:
         try:
@@ -38,13 +38,14 @@ def register_worker():
 
 def send_heartbeat():
     while True:
-        stats = {
-            "cpu_percent": psutil.cpu_percent(),
-            "ram_percent": psutil.virtual_memory().percent
-        }
         try:
-            resp = requests.post(f"{API_URL}/workers/heartbeat", json={"id": WORKER_ID, "stats": stats})
-            if resp.status_code != 200:
+            payload = {
+                "name": WORKER_ID,
+                "cpu_used": 0,
+                "ram_used_mb": 0
+            }
+            resp = requests.post(f"{API_URL}/workers/heartbeat", json=payload)
+            if resp.status_code != 204:
                 print(f"Heartbeat failed: {resp.status_code} - {resp.text}")
         except Exception as e:
             print(f"Error sending heartbeat: {e}")
