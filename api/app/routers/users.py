@@ -15,7 +15,7 @@ def registre(payload: UserCreate, db: Session = Depends(get_db)):
           raise HTTPException(409, "Email deja utilise")
      u = User(email = payload.email, password_hash = hash_password(payload.password))
      db.add(u)
-     db.commit(u)
+     db.commit()
      db.refresh(u)
      return u
 
