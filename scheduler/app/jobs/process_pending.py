@@ -54,7 +54,8 @@ def process_pending(batch_size: int = 10) -> int:
                     continue
                # creer le conteneur Docker
                try:
-                    container_id = cmgr.create_container(r, machine)
+                    result = cmgr.create_container(worker, r, machine)
+                    container_id = result["container_id"]
                except ContainerError as e:
                     r.status = "FAILED"
                     log_event(db, r.id, from_status="PENDING", to_status="FAILED",reason=f"container_creation_failed: {e.code}")

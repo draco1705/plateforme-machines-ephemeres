@@ -1,4 +1,13 @@
+# Deployment tools (F10-F11)
 ansible==10.7.0
+ansible-core==2.17.6
+
+# Docker SDK (cho scripts quản lý)
 docker==7.1.0
+
+# HTTP client (test API)
 requests==2.32.3
+httpx==0.28.1
+
+# Config
 python-dotenv==1.0.1

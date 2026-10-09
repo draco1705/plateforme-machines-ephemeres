@@ -1,0 +1,16 @@
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Docker SDK
+docker==7.1.0
+
+# System monitoring
+psutil==6.1.0
+
+# HTTP client
+requests==2.32.3
+httpx==0.28.1
+
+# Validation
+pydantic==2.10.3

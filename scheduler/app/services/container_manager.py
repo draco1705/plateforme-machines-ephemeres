@@ -1,9 +1,13 @@
 import docker
 from docker.errors import DockerException, ImageNotFound, APIError
-
+import os
+from pathlib import Path
+import httpx
 from app.models.reservation import Reservation
 from app.models.machine import Machine
 from app.models.worker import Worker
+
+TRAEFIK_DYNAMIC_DIR = Path("/opt/labhacker/traefik-dynamic")
 
 class ContainerError(Exception):
     """Erreur de gestion de conteneur."""
@@ -14,101 +18,77 @@ class ContainerError(Exception):
 
 
 class ContainerManager:
-    """Gere le cycle de vie des conteneurs lab."""
-    def __init__(self):
-        try:
-            self.client = docker.from_env()
-            self.client.ping()   
-        except DockerException as e:
-            raise ContainerError(f"Docker indisponible: {e}", "DOCKER_DOWN")
+    """Gère les conteneurs en déléguant au Worker Agent via HTTP."""
+    # Timeouts HTTP
+    CREATE_TIMEOUT = 120   
+    REMOVE_TIMEOUT = 30
+    STATUS_TIMEOUT = 10
+    HEALTH_TIMEOUT = 5
+    
+    @staticmethod        
+    def _worker_url(worker: Worker) -> str:
+        port = getattr(worker, "port", 8001) or 8001
+        ip = getattr(worker, "ip", "127.0.0.1")
+        return f"http://{ip}:{port}"
 
     # ═══════════════════════════════════════════════════════════════
     # US19 — Creer un conteneur dynamique
     # ═══════════════════════════════════════════════════════════════
-    def create_container(self, reservation: Reservation, machine: Machine) -> str:
-        """Cree et demarre un conteneur pour la réservation, retourne le container_id."""
-        container_name = f"lab-reservation-{reservation.id}"
-        # Verifier que l'image existe localement
-        try:
-            self.client.images.get(machine.image)
-        except ImageNotFound:
-            # Essayer de pull
-            try:
-                print(f"[container] pulling image {machine.image}...")
-                self.client.images.pull(machine.image)
-            except APIError as e:
-                raise ContainerError(f"Image {machine.image} introuvable: {e}", "IMAGE_NOT_FOUND")
-        # commande HTTP server pour que Traefik puisse router python http.server écoute sur port 80
-        # if "alpine" in machine.image:
-        #     # Alpine : python3 + nc fallback
-        #     cmd = ["sh", "-c", f"while true; do echo \"Hello from lab-{reservation.id} on alpine\" | nc -l -p 80; done"]
-        # else:
-            # cmd = ["sh", "-c",
-            #     f"python3 -m http.server 80 2>/dev/null || "
-            #     f"(echo 'Hello from lab-{reservation.id}' > /tmp/index.html && "
-            #     f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\n'; "
-            #     f"cat /tmp/index.html) | nc -l -p 80 -q 1; done)"]
-
-        if "nginx" in machine.image:
-            cmd = None  # Giữ nguyên entrypoint mặc định của Nginx để tự phục vụ port 80
-        elif "alpine" in machine.image:
-            cmd = [
-                "sh", "-c",
-                f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\nHello from lab-{reservation.id} on alpine') | nc -l -p 80; done"
-            ]
-        else:
-            cmd = [
-                "sh", "-c",
-                f"if command -v python3 >/dev/null 2>&1; then "
-                f"python3 -m http.server 80; "
-                f"else "
-                f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\nHello from lab-{reservation.id}') | nc -l -p 80; done; "
-                f"fi"
-            ]
-
-        labels = {
-            # Activer Traefik
-            "traefik.enable": "true",
-            "traefik.docker.network": "lab-net",
-
-            # Router pour cette reservation
-            f"traefik.http.routers.lab-{reservation.id}.rule":
-                f"Host(`lab-{reservation.id}.lab.local`)",
-            f"traefik.http.routers.lab-{reservation.id}.entrypoints":
-                "websecure",
-            f"traefik.http.routers.lab-{reservation.id}.tls": "true",
-            f"traefik.http.routers.lab-{reservation.id}.middlewares":
-                "security-headers@file",
-
-            # Service pour cette reservation
-            f"traefik.http.services.lab-{reservation.id}.loadbalancer.server.port":
-                "80",
-
-            # Metadonnées
-            "lab.reservation_id": str(reservation.id),
-            "lab.user_id":        str(reservation.user_id),
-            "lab.machine":        machine.name,
-            "lab.expires_at":     reservation.end_time.isoformat(),
+    def create_container(self, worker: Worker,reservation: Reservation, machine: Machine) -> dict[str, any]:
+        payload = {
+            "reservation_id": reservation.id,
+            "image": machine.image,
+            "cpu": reservation.cpu,
+            "ram_mb": reservation.ram_mb,
+            "port": getattr(machine, "port", 80) or 80,
+            "expires_at": reservation.end_time.isoformat() if reservation.end_time else "",
         }
-        # Config du conteneur
-        try:
-            container = self.client.containers.run(
-                image=machine.image,
-                name=container_name,
-                detach=True,                              
-                mem_limit=f"{reservation.ram_mb}m",       
-                nano_cpus=int(reservation.cpu * 1e9),     
-                network="lab-net",                        
-                labels=labels,
-                # Commande : garder le conteneur vivant
-                command=cmd,
-                restart_policy={"Name": "unless-stopped"},
-            )
-            print(f"[container] created {container_name} (id={container.id[:12]}) url=https://lab-{reservation.id}.lab.local")
-            return container.id
+        url = f"{self._worker_url(worker)}/containers"
 
-        except APIError as e:
-            raise ContainerError(f"Échec docker run: {e}", "RUN_FAILED")
+        try:
+            r = httpx.post(url, json=payload, timeout=self.CREATE_TIMEOUT)
+        except httpx.ConnectError:
+            raise ContainerError(
+                f"Worker {worker.name} injoignable ({worker.ip})",
+                "WORKER_UNREACHABLE",
+            )
+        except httpx.TimeoutException:
+            raise ContainerError(
+                f"Worker {worker.name} timeout sau {self.CREATE_TIMEOUT}s",
+                "WORKER_TIMEOUT",
+            )
+        except httpx.HTTPError as e:
+            raise ContainerError(
+                f"Erreur HTTP vers Worker {worker.name}: {e}",
+                "WORKER_HTTP_ERROR",
+            )
+
+        if r.status_code == 201:
+            data = r.json()
+            container_id = data.get("container_id", "")
+            print(
+                f"[scheduler] Worker {worker.name} -> container "
+                f"{container_id[:12]} (url=https://lab-{reservation.id}.lab.local)"
+            )
+            return data
+
+        try:
+            body = r.json()
+            detail = body.get("detail", {}) if isinstance(body, dict) else r.text
+            if isinstance(detail, dict):
+                message = detail.get("message", r.text)
+                code = detail.get("code", "CREATE_FAILED")
+            else:
+                message = str(detail)
+                code = "CREATE_FAILED"
+        except Exception:
+            message = r.text
+            code = "CREATE_FAILED"
+
+        raise ContainerError(
+            f"Worker {worker.name} : HTTP {r.status_code} — {message}",
+            code,
+        )
 
     # ═══════════════════════════════════════════════════════════════
     # US20 — Cycle de vie
@@ -147,16 +127,40 @@ class ContainerManager:
         except APIError as e:
             raise ContainerError(f"Échec pause: {e}", "PAUSE_FAILED")
 
-    def remove_container(self, container_id: str, force: bool = True) -> None:
-        """suppression (avec nettoyage automatique)."""
+    def remove_container(self, worker: Worker, container_id: str,force: bool = True) -> None:
+        url = f"{self._worker_url(worker)}/containers/{container_id}"
+        params = {"force": force}
         try:
-            c = self.client.containers.get(container_id)
-            c.remove(force=force, v=True)   
-            print(f"[container] removed {container_id[:12]}")
-        except docker.errors.NotFound:
-            print(f"[container] {container_id[:12]} introuvable (déjà supprimé)")
-        except APIError as e:
-            raise ContainerError(f"Échec remove: {e}", "REMOVE_FAILED")
+            r = httpx.delete(url, params=params, timeout=self.REMOVE_TIMEOUT)
+        except httpx.HTTPError as e:
+            raise ContainerError(f"Worker {worker.name} injoignable: {e}","WORKER_UNREACHABLE")
+
+        if r.status_code in (204, 404):
+            print(f"[scheduler] Worker {worker.name} : container {container_id[:12]} removed")
+            return
+
+        raise ContainerError(
+            f"Worker {worker.name} : HTTP {r.status_code} — {r.text}",
+            "REMOVE_FAILED",
+        )
+
+    def get_container_status(self, worker: Worker, container_id: str) -> str:
+        url = f"{self._worker_url(worker)}/containers/{container_id}/status"
+        try:
+            r = httpx.get(url, timeout=self.STATUS_TIMEOUT)
+            if r.status_code == 200:
+                return r.json().get("status")
+        except httpx.HTTPError:
+            return None
+        return None
+
+    def ping_worker(self, worker: Worker) -> bool:
+        url = f"{self._worker_url(worker)}/health"
+        try:
+            r = httpx.get(url, timeout=self.HEALTH_TIMEOUT)
+            return r.status_code == 200
+        except httpx.HTTPError:
+            return False
 
     # ═══════════════════════════════════════════════════════════════
     # US21 — Synchroniser Docker ↔ DB

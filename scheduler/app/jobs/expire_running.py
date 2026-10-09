@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from app.database import SessionLocal
 from app.models.reservation import Reservation
@@ -34,11 +34,13 @@ def expire_running(batch_size: int = 20) -> int:
             return 0
           for r in expired:
                # supprimer le conteneur Docker
-               if r.container_id:
-                    try:
-                         cmgr.remove_container(r.container_id)
-                    except ContainerError as e:
-                         print(f"[scheduler] reservation #{r.id} — remove échoué: {e.message}")
+               if r.container_id and r.worker_id:
+                    worker = db.get(Worker, r.worker_id)
+                    if worker:
+                         try:
+                            cmgr.remove_container(worker, r.container_id)
+                         except ContainerError as e:
+                            print(f"[scheduler] remove échoué: {e.message}")
                # Liberer les ressources du Worker
                if r.worker_id is not None:
                     worker = db.get(Worker, r.worker_id)

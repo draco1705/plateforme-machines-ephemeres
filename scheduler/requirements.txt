@@ -1,5 +1,13 @@
-sqlalchemy==2.0.35
-psycopg2-binary>=2.9.10
-pydantic==2.9.2
-pydantic-settings==2.5.2
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# Validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Docker SDK (F6)
 docker==7.1.0
+
+# HTTP client (F12 - gọi Worker Agent)
+httpx==0.28.1
