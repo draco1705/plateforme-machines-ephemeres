@@ -1,7 +1,9 @@
 # app/schemas/worker.py
 from datetime import datetime
 from typing import Literal
+
 from pydantic import BaseModel, Field
+
 from app.schemas.common import ORMBase
 
 WorkerStatus = Literal["AVAILABLE", "BUSY", "OFFLINE", "MAINTENANCE"]

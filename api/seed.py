@@ -1,7 +1,8 @@
 # Scripts seed data for dev
-from app.database import SessionLocal
-from app.models import User, Machine
 from app.core.security import hash_password
+from app.database import SessionLocal
+from app.models import Machine, User
+
 
 def main():
      db = SessionLocal()

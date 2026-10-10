@@ -1,6 +1,8 @@
 # app/models/machine.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, func, Index, CheckConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Integer, String, func
+
 from app.database import Base
+
 
 class Machine(Base):
     __tablename__ = "machines"

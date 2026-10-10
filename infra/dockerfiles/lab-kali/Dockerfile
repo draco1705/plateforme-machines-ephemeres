@@ -4,6 +4,7 @@ FROM kalilinux/kali-rolling
 RUN apt-get clean && \
      rm -rf /var/lib/apt/lists/* && \
      apt-get update && \
+     apt-get upgrade -y && \
      apt-get install -y --no-install-recommends \
      python3 \
      openssh-server \
@@ -24,4 +25,3 @@ WORKDIR /tmp
 EXPOSE 22 80
 
 CMD ["sh", "-c", "python3 -m http.server 80 & exec /usr/sbin/sshd -D"]
-

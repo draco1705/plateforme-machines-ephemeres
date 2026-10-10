@@ -1,14 +1,21 @@
 # app/routers/reservations.py
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models.reservation import Reservation
-from app.models.machine import Machine
-from app.schemas.reservation import ReservationCreate, ReservationOut, ReservationEventOut
+
 from app.core.deps import current_user
-from app.services.reservation_events import log_event
+from app.database import get_db
+from app.models.machine import Machine
+from app.models.reservation import Reservation
 from app.models.reservation_event import ReservationEvent
+from app.schemas.reservation import (
+    ReservationCreate,
+    ReservationEventOut,
+    ReservationOut,
+)
+from app.services.reservation_events import log_event
+
 router = APIRouter()
 
 @router.post("", response_model=ReservationOut, status_code=201)
@@ -33,7 +40,7 @@ def create(payload: ReservationCreate, db: Session = Depends(get_db), user=Depen
     if busy:
         raise HTTPException(409, "Vous avez déjà un lab actif")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     r = Reservation(
         user_id=user.id, machine_id=m.id,
         cpu=payload.cpu, ram_mb=payload.ram_mb,
@@ -68,7 +75,7 @@ def cancel(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):
         raise HTTPException(409, "Déjà terminée")
     old_status = r.status
     r.status = "CANCELLED" 
-    r.end_time = datetime.now(timezone.utc)
+    r.end_time = datetime.now(UTC)
     log_event(db, r.id, from_status=old_status, to_status="CANCELLED", reason="user_cancelled")
     db.commit()
 

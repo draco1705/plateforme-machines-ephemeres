@@ -1,12 +1,31 @@
 # app/main.py
-from fastapi import FastAPI
-from app.config import settings
-from app.database import Base, engine
-from app.routers import users, machines, reservations, workers, health, ressources
-from app.exceptions import register_exception_handlers
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
+from app.exceptions import register_exception_handlers
+from app.routers import health, machines, reservations, ressources, users, workers
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust as needed for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
 register_exception_handlers(app)
 
 app.include_router(health.router, tags=["health"])

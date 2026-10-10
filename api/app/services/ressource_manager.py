@@ -1,15 +1,17 @@
-from app.models.worker import Worker
-from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import select
+
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.worker import Worker
+
 
 class RessourceManager:
      """ Gestion des reservations de ressources"""
      def __init__(self, db:Session):
           self.db = db 
      
-     def select_worker(self, cpu:int, ram_mb: int) -> Optional[Worker]:
+     def select_worker(self, cpu:int, ram_mb: int) -> Worker | None:
           """ Choisit le worker AVAILABLE avec assez de ressources. 
           Strategie : "best fit" — worker le moins chargé en CPU"""
           stmt = (
@@ -30,7 +32,7 @@ class RessourceManager:
           )
           return self.db.execute(stmt).scalar_one_or_none()
 
-     def reserve(self, cpu: int, ram_mb: int, worker_id: Optional[int] = None) -> Worker:
+     def reserve(self, cpu: int, ram_mb: int, worker_id: int | None = None) -> Worker:
         """
         Reserve cpu + ram sur un worker.
         - Si worker_id donne: verifie que CE worker a assez, sinon 409.

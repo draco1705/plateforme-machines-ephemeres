@@ -1,8 +1,7 @@
 import argparse
-import requests
-import json
-import sys
 import os
+
+import requests
 
 API_URL = os.getenv("LABHACKER_API_URL", "http://localhost:8000")
 TOKEN_FILE = os.path.expanduser("~/.labhacker_token")

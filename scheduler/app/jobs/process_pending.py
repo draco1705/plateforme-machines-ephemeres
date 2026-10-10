@@ -1,12 +1,13 @@
-from datetime import datetime, timezone
-from sqlalchemy import select
+from datetime import UTC, datetime, timezone
+
 from app.database import SessionLocal
-from app.models.reservation import Reservation
-from app.services.ressource_manager import RessourceError, RessourceManager
-from app.services.container_manager import ContainerManager, ContainerError
 from app.models.machine import Machine
-from app.models.worker import Worker
+from app.models.reservation import Reservation
+from app.services.container_manager import ContainerError, ContainerManager
 from app.services.reservation_events import log_event
+from app.services.ressource_manager import RessourceManager
+from sqlalchemy import select
+
 
 # Loop: Process_pending -> Expire_running -> Sleep(INTERVAL)
 def process_pending(batch_size: int = 10) -> int:
@@ -14,7 +15,7 @@ def process_pending(batch_size: int = 10) -> int:
      db = SessionLocal()
      processed = 0
      try:
-          now = datetime.now(timezone.utc)
+          now = datetime.now(UTC)
           stmt = (
                select(Reservation)
                .where(Reservation.status == "PENDING")
@@ -36,6 +37,7 @@ def process_pending(batch_size: int = 10) -> int:
           for r in pending:
                # Reservation deja expiree avant meme d'etre traitee
                if r.end_time <= now:
+                    old = r.status
                     r.status = "EXPIRED"
                     log_event(db, r.id, from_status=old, to_status="EXPIRED", reason="expired_before_processing")
                     print(f"[scheduler] reservation #{r.id} PENDING -> EXPIRED (deja expiree)")

@@ -1,8 +1,9 @@
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select
+from datetime import UTC, datetime, timedelta, timezone
+
 from app.database import SessionLocal
 from app.models.reservation import Reservation
 from app.services.reservation_events import log_event
+from sqlalchemy import select
 
 MAX_PENDING_MINUTES = 30
 
@@ -11,7 +12,7 @@ def expire_pending_timeout() -> int:
      db = SessionLocal()
      count=0
      try:
-          cutoff = datetime.now(timezone.utc) - timedelta(minutes=MAX_PENDING_MINUTES)
+          cutoff = datetime.now(UTC) - timedelta(minutes=MAX_PENDING_MINUTES)
           stmt = (
                select(Reservation)
                .where(

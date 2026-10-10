@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.core.deps import current_user
 from app.database import get_db
 from app.models.worker import Worker
 from app.schemas.ressource import (
-    RessourceUsage, RessourceSummary, RessourceReserveRequest, RessourceReleaseRequest,
+    RessourceReleaseRequest,
+    RessourceReserveRequest,
+    RessourceSummary,
+    RessourceUsage,
+    WorkerStatusUpdate,
 )
 from app.services.ressource_manager import RessourceManager
-from app.core.deps import current_user
-from app.schemas.ressource import WorkerStatusUpdate
 
 VALID_TRANSITIONS = {
     "AVAILABLE":   {"BUSY", "OFFLINE", "MAINTENANCE"},

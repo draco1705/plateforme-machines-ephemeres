@@ -1,6 +1,17 @@
 # app/models/reservation.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func, Index, CheckConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
+
 from app.database import Base
+
 
 class Reservation(Base):
     __tablename__ = "reservations"

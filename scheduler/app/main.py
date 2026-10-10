@@ -1,11 +1,11 @@
 import signal
-import sys
 import time
+
 from app.config import settings
-from app.jobs.process_pending import process_pending
-from app.jobs.expire_running import expire_running
 from app.jobs.cancel_running import cancel_running
 from app.jobs.expire_pending import expire_pending_timeout
+from app.jobs.expire_running import expire_running
+from app.jobs.process_pending import process_pending
 
 _shutdown = False
 
@@ -15,7 +15,7 @@ def _handle_signal(signum, frame):
      _shutdown = True
 def run_loop():
      print("=" * 60)
-     print(f"[scheduler] démarrage")
+     print("[scheduler] démarrage")
      print(f"[scheduler] interval = {settings.SCHEDULER_INTERVAL_SECONDS}s")
      print(f"[scheduler] batch    = {settings.BATCH_SIZE}")
      print(f"[scheduler] DB       = {settings.DATABASE_URL}")

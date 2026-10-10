@@ -1,9 +1,8 @@
 import docker
-from docker.errors import DockerException, ImageNotFound, APIError
-
-from app.models.reservation import Reservation
 from app.models.machine import Machine
-from app.models.worker import Worker
+from app.models.reservation import Reservation
+from docker.errors import APIError, DockerException, ImageNotFound
+
 
 class ContainerError(Exception):
     """Erreur de gestion de conteneur."""
