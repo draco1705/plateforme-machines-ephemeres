@@ -77,7 +77,7 @@ jobs:
 
       - name: Run Integration Tests
         run: |
-          python api/tests/test_integration.py
+          python -m pytest api/tests/test_integration.py
 
   docker-build-and-scan:
     name: Docker Build & Scan
