@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, tam ]
+    branches: [ main, test, tam ]
   pull_request:
-    branches: [ main, tam ]
+    branches: [ main, test, tam ]
 
 env:
   ENV: ci
@@ -75,9 +75,11 @@ jobs:
           pip install -r api/requirements.txt
           pip install -r scheduler/requirements.txt
 
-      - name: Run Integration Tests
+      - name: Run Integration and Component Tests
         run: |
-          python -m pytest api/tests/test_integration.py
+          pip install rich
+          python -m pytest api/tests/ scheduler/tests/ cli/tests/ worker_agent/test_agent_endpoints.py
+          python test_all_criteria.py
 
   docker-build-and-scan:
     name: Docker Build & Scan

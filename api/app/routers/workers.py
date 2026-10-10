@@ -1,5 +1,5 @@
 # app/routers/workers.py
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ def register(payload: WorkerRegister, db: Session = Depends(get_db)):
         w = Worker(**payload.model_dump())
         db.add(w)
     w.status = "AVAILABLE"
-    w.last_heartbeat = datetime.now(UTC)
+    w.last_heartbeat = datetime.now(timezone.utc)
     db.commit(); db.refresh(w)
     return w
 
@@ -32,7 +32,7 @@ def heartbeat(payload: WorkerHeartbeat, db: Session = Depends(get_db)):
     if not w: raise HTTPException(404, "Worker non enregistré")
     w.cpu_used      = payload.cpu_used
     w.ram_used_mb   = payload.ram_used_mb
-    w.last_heartbeat = datetime.now(UTC)
+    w.last_heartbeat = datetime.now(timezone.utc)
     # US07 : detection des Workers indisponibles
     w.status = "BUSY" if w.cpu_used >= w.cpu_total else "AVAILABLE"
     db.commit()
@@ -49,8 +49,9 @@ def get_worker(wid: int, db: Session = Depends(get_db), _=Depends(current_user))
     return w
 
 def _mark_offline(db: Session, timeout_s: int = 30):
-    pass
-    # cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_s)
-    # db.query(Worker).filter(Worker.last_heartbeat < cutoff)\
-    #                 .update({"status": "OFFLINE"})
-    # db.commit()
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_s)
+    db.query(Worker).filter(
+        Worker.last_heartbeat < cutoff,
+        Worker.status.notin_(["OFFLINE", "MAINTENANCE"])
+    ).update({"status": "OFFLINE"}, synchronize_session=False)
+    db.commit()
