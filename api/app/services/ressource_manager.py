@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session
 from app.models.worker import Worker
 
 
+class RessourceError(Exception):
+    """Erreur de gestion de ressources"""
+    pass
+
+
 class RessourceManager:
      """ Gestion des reservations de ressources"""
      def __init__(self, db:Session):

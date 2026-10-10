@@ -4,11 +4,18 @@ import socket
 import threading
 import time
 
-import docker
-from docker.errors import APIError, DockerException, ImageNotFound
+try:
+    import docker
+    from docker.errors import APIError, DockerException, ImageNotFound
+except ImportError:
+    docker = None
+    APIError = DockerException = ImageNotFound = Exception
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 import requests
 
 API_URL = os.getenv("CONTROLLER_API_URL", "http://192.168.56.10:8000")
@@ -32,8 +39,8 @@ def get_ip() -> str:
 
 
 WORKER_IP = get_ip()
-CPU_TOTAL = psutil.cpu_count(logical=True) or 2
-RAM_TOTAL_MB = int(psutil.virtual_memory().total // (1024 * 1024))
+CPU_TOTAL = (psutil.cpu_count(logical=True) if psutil else 2) or 2
+RAM_TOTAL_MB = int(psutil.virtual_memory().total // (1024 * 1024)) if psutil else 2048
 
 # ────────────────────────────────────────────────────────────
 # DOCKER CLIENT

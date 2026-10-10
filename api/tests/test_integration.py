@@ -52,11 +52,11 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    app.dependency_overrides[get_db] = override_get_db
     db = TestingSessionLocal()
     if not db.query(User).filter_by(email='admin@lab.local').first():
         admin_user = User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin')
@@ -69,6 +69,8 @@ def setup_db():
         db.add(m)
     db.commit()
     db.close()
+    yield
+    app.dependency_overrides.pop(get_db, None)
 
 def test_health():
     response = client.get('/health')

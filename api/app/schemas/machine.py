@@ -28,6 +28,6 @@ class MachineOut(ORMBase):
     image: str
     cpu_min: int
     ram_min_mb: int
-    port: int
+    port: int = 80
     enabled: bool
-    created_at: datetime
+    created_at: datetime | None = None

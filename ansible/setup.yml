@@ -1,13 +1,14 @@
 ---
-- name: Setup Docker and Environment
+- name: Setup Docker and Base Environment on Cluster
   hosts: cluster
   become: yes
   tasks:
     - name: Update apt cache
       apt:
         update_cache: yes
+        cache_valid_time: 3600
 
-    - name: Install required packages
+    - name: Install base dependencies
       apt:
         name:
           - apt-transport-https
@@ -15,29 +16,47 @@
           - curl
           - software-properties-common
           - python3-pip
+          - python3-venv
+          - python3-dev
+          - rsync
         state: present
 
-    - name: Add Docker GPG key
-      apt_key:
+    - name: Create /etc/apt/keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker GPG key
+      get_url:
         url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
 
     - name: Add Docker repository
       apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu
+          {{ ansible_distribution_release }} stable
         state: present
+        filename: docker
 
-    - name: Install Docker
+    - name: Install Docker and Compose plugin
       apt:
-        name: docker-ce
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
         state: present
         update_cache: yes
 
-    - name: Install docker-compose
-      get_url:
-        url: https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
 
     - name: Ensure vagrant user is in docker group
       user:
@@ -45,64 +64,323 @@
         groups: docker
         append: yes
 
-- name: Deploy Controller Components
+    - name: Ensure Docker network lab-net exists
+      command: docker network create lab-net
+      register: net_result
+      failed_when: false
+      changed_when: net_result.rc == 0
+
+    - name: Reset SSH connection to apply docker group
+      meta: reset_connection
+
+- name: Deploy Controller Components (Reverse Proxy, DB, API, Scheduler)
   hosts: controllers
-  become: yes
+  become: true
+
+  vars:
+    project_dir: /opt/labhacker
+
   tasks:
-    - name: Copy project files
-      copy:
-        src: ../
-        dest: /opt/labhacker/
+    - name: Create project base directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
         owner: vagrant
         group: vagrant
+        mode: "0755"
 
-    - name: Start services on controller
-      command: docker-compose up -d
-      args:
-        chdir: /opt/labhacker/
+    - name: Sync project files from host to controller
+      synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ project_dir }}/"
+        delete: false
+        rsync_opts:
+          - "--chown=vagrant:vagrant"
+          - "--exclude=.venv"
+          - "--exclude=**/.venv"
+          - "--exclude=__pycache__"
+          - "--exclude=**/__pycache__"
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--exclude=infra/vagrant/.vagrant"
+          - "--exclude=.vagrant"
+          - "--exclude=.env"
+        rsync_path: "sudo rsync"
 
-    - name: Install API and Scheduler dependencies
-      pip:
-        requirements: /opt/labhacker/{{ item }}/requirements.txt
-        executable: pip3
-      loop:
-        - api
-        - scheduler
-
-    - name: Start API
-      shell: nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /var/log/api.log 2>&1 &
-      args:
-        chdir: /opt/labhacker/api
-      async: 10
-      poll: 0
-
-    - name: Start Scheduler
-      shell: nohup python3 -m app.main > /var/log/scheduler.log 2>&1 &
-      args:
-        chdir: /opt/labhacker/scheduler
-      async: 10
-      poll: 0
-      
-- name: Deploy Worker Agent
-  hosts: workers
-  become: yes
-  tasks:
-    - name: Install psutil and docker SDK for python
-      pip:
-        name:
-          - psutil
-          - requests
-          - docker
-        executable: pip3
-
-    - name: Copy worker agent script
+    - name: Create root .env for Docker Compose
       copy:
-        src: ../worker_agent/agent.py
-        dest: /opt/worker_agent.py
+        dest: "{{ project_dir }}/.env"
         owner: vagrant
-        mode: '0755'
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@lab-postgres:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+          LAB_NETWORK=lab-net
+          DOCKER_SOCKET=/var/run/docker.sock
 
-    - name: Start worker agent (nohup)
-      shell: nohup python3 /opt/worker_agent.py > /var/log/worker_agent.log 2>&1 &
-      async: 10
-      poll: 0
+    - name: Create .env for API
+      copy:
+        dest: "{{ project_dir }}/api/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@127.0.0.1:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+
+    - name: Create .env for Scheduler
+      copy:
+        dest: "{{ project_dir }}/scheduler/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@127.0.0.1:5432/labdb
+          SCHEDULER_INTERVAL_SECONDS=5
+          BATCH_SIZE=10
+
+    - name: Ensure certificates exist for Traefik (*.lab.local)
+      shell: |
+        mkdir -p "{{ project_dir }}/certs"
+        if [ ! -f "{{ project_dir }}/certs/lab.local.crt" ]; then
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "{{ project_dir }}/certs/lab.local.key" \
+            -out "{{ project_dir }}/certs/lab.local.crt" \
+            -subj "/CN=*.lab.local" \
+            -addext "subjectAltName=DNS:*.lab.local,DNS:lab.local"
+        fi
+      args:
+        creates: "{{ project_dir }}/certs/lab.local.crt"
+
+    - name: Create venv for API and install dependencies
+      pip:
+        requirements: "{{ project_dir }}/api/requirements.txt"
+        virtualenv: "{{ project_dir }}/api/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Create venv for Scheduler and install dependencies
+      pip:
+        requirements: "{{ project_dir }}/scheduler/requirements.txt"
+        virtualenv: "{{ project_dir }}/scheduler/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Start Docker Compose services (Postgres & Traefik)
+      command:
+        cmd: docker compose up -d
+        chdir: "{{ project_dir }}"
+      become_user: vagrant
+      register: compose_result
+      changed_when: >-
+        ('Created' in compose_result.stdout or 'Created' in compose_result.stderr) or
+        ('Started' in compose_result.stdout or 'Started' in compose_result.stderr) or
+        ('Recreated' in compose_result.stdout or 'Recreated' in compose_result.stderr)
+
+    - name: Wait for Postgres to be healthy
+      command:
+        cmd: docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres
+      become_user: vagrant
+      register: pg_health
+      until: pg_health.stdout | trim == "healthy"
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: Run Alembic database migrations
+      command:
+        cmd: "{{ project_dir }}/api/.venv/bin/alembic upgrade head"
+        chdir: "{{ project_dir }}/api"
+      become_user: vagrant
+      register: migrate_res
+      changed_when: "'Running upgrade' in migrate_res.stdout"
+
+    - name: Seed database with initial users and machines
+      command:
+        cmd: "{{ project_dir }}/api/.venv/bin/python {{ project_dir }}/api/seed.py"
+        chdir: "{{ project_dir }}/api"
+      become_user: vagrant
+      register: seed_res
+      changed_when: "'Seed termine' in seed_res.stdout"
+
+    - name: Create systemd unit for Lab API
+      copy:
+        dest: /etc/systemd/system/lab-api.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker REST API
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ project_dir }}/api
+          ExecStart={{ project_dir }}/api/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/lab-api.log
+          StandardError=append:/var/log/lab-api.err
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd unit for Lab Scheduler
+      copy:
+        dest: /etc/systemd/system/lab-scheduler.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker Scheduler
+          After=network.target lab-api.service
+          Requires=lab-api.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ project_dir }}/scheduler
+          ExecStart={{ project_dir }}/scheduler/.venv/bin/python -m app.main
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/lab-scheduler.log
+          StandardError=append:/var/log/lab-scheduler.err
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and start API & Scheduler services
+      systemd:
+        name: "{{ item }}"
+        daemon_reload: true
+        state: restarted
+        enabled: true
+      loop:
+        - lab-api
+        - lab-scheduler
+
+    - name: Wait for API to be healthy
+      uri:
+        url: "http://127.0.0.1:8000/health"
+        return_content: true
+        timeout: 5
+      register: api_health
+      until: api_health.status == 200
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    - name: Display API health
+      debug:
+        msg: "API is healthy: {{ api_health.json }}"
+
+- name: Deploy Worker Agent on Workers
+  hosts: workers
+  become: true
+  gather_facts: true
+
+  vars:
+    agent_dir: /opt/worker_agent
+    controller_ip: "192.168.56.10"
+
+  tasks:
+    - name: Create worker_agent directory
+      file:
+        path: "{{ agent_dir }}"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Copy agent.py
+      copy:
+        src: "{{ inventory_dir }}/../worker_agent/agent.py"
+        dest: "{{ agent_dir }}/agent.py"
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Copy worker requirements.txt
+      copy:
+        content: |
+          fastapi>=0.115.0
+          uvicorn[standard]>=0.32.0
+          docker>=7.1.0
+          psutil>=6.0.0
+          requests>=2.31.0
+          pydantic>=2.9.0
+        dest: "{{ agent_dir }}/requirements.txt"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+
+    - name: Create venv and install dependencies
+      pip:
+        requirements: "{{ agent_dir }}/requirements.txt"
+        virtualenv: "{{ agent_dir }}/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Create systemd unit for worker-agent
+      copy:
+        dest: /etc/systemd/system/worker-agent.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker Worker Agent
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ agent_dir }}
+          Environment=CONTROLLER_API_URL=http://{{ controller_ip }}:8000
+          Environment=WORKER_NAME={{ inventory_hostname }}
+          Environment=WORKER_PORT=8001
+          Environment=HEARTBEAT_INTERVAL=5
+          Environment=DOCKER_NETWORK=lab-net
+          Environment=MAX_CONTAINERS=4
+          ExecStart={{ agent_dir }}/.venv/bin/python {{ agent_dir }}/agent.py
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/worker-agent.log
+          StandardError=append:/var/log/worker-agent.err
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and restart worker-agent
+      systemd:
+        name: worker-agent
+        daemon_reload: true
+        state: restarted
+        enabled: true
+
+    - name: Wait for worker-agent to be ready
+      uri:
+        url: "http://{{ ansible_host }}:8001/health"
+        return_content: true
+        timeout: 5
+      register: worker_health
+      until: worker_health.status == 200
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    - name: Display worker health
+      debug:
+        msg: "{{ inventory_hostname }}: {{ worker_health.json }}"

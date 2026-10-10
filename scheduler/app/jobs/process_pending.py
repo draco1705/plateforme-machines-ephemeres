@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 
 from app.database import SessionLocal
 from app.models.machine import Machine
@@ -15,7 +15,7 @@ def process_pending(batch_size: int = 10) -> int:
      db = SessionLocal()
      processed = 0
      try:
-          now = datetime.now(UTC)
+          now = datetime.now(timezone.utc)
           stmt = (
                select(Reservation)
                .where(Reservation.status == "PENDING")
@@ -74,7 +74,7 @@ def process_pending(batch_size: int = 10) -> int:
                     old = r.status
                     r.worker_id = worker.id
                     r.container_id = container_id
-                    r.access_url = f"http://lab-{r.id}.lab.local"
+                    r.access_url = f"https://lab-{r.id}.lab.local"
                     r.status = "RUNNING"
                     log_event(db, r.id, from_status=old, to_status="RUNNING", reason=f"assigned_to_worker_{worker.name}")
                     print(
