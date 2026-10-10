@@ -18,9 +18,14 @@ def set_token(token):
 
 def login(args):
     print("Logging in...")
-    resp = requests.post(f"{API_URL}/login", json={"username": args.username, "password": args.password})
+    # resp = requests.post(f"{API_URL}/login", json={"username": args.username, "password": args.password})
+    resp = requests.post(
+        f"{API_URL}/users/login",
+        data = {"username" : args.username, "password" : args.password},
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    )
     if resp.status_code == 200:
-        set_token(resp.json().get("token"))
+        set_token(resp.json().get("access_token"))
         print("Logged in successfully!")
     else:
         print("Login failed!")
@@ -35,7 +40,7 @@ def logout(args):
 def reserve(args):
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    data = {"machine": args.machine, "duration": args.duration}
+    data = {"machine_id": args.machine_id, "cpu": args.cpu, "ram_mb": args.ram_mb, "duration_minutes": args.duration_minutes}
     resp = requests.post(f"{API_URL}/reservations", json=data, headers=headers)
     if resp.status_code == 201:
         res = resp.json()
@@ -52,7 +57,7 @@ def list_res(args):
         print(f"{'ID':<40} | {'Machine':<10} | {'Worker':<10} | {'Status'}")
         print("-" * 80)
         for r in reservations:
-            print(f"{r['id']:<40} | {r['machine']:<10} | {r.get('worker', 'N/A'):<10} | {r['status']}")
+            print(f"{r['id']:<6} | machine_id={r.get('machine_id', '?'):<3} | worker_id={r.get('worker_id', 'N/A')} | {r['status']}")
     else:
         print(f"Failed to fetch: {resp.text}")
 
@@ -60,7 +65,7 @@ def delete_res(args):
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     resp = requests.delete(f"{API_URL}/reservations/{args.id}", headers=headers)
-    if resp.status_code == 200:
+    if resp.status_code == 204:
         print("Reservation deleted.")
     else:
         print(f"Failed to delete: {resp.text}")

@@ -1,15 +1,14 @@
-import datetime
-import os
-import socket
-import threading
-import time
-
-import docker
-from docker.errors import APIError, DockerException, ImageNotFound
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
 import psutil
 import requests
+import time
+import socket
+import threading
+import os
+from datetime import datetime
+import docker
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from docker.errors import DockerException, ImageNotFound, APIError
 
 API_URL = os.getenv("CONTROLLER_API_URL", "http://192.168.56.10:8000")
 WORKER_NAME = os.getenv("WORKER_NAME", socket.gethostname())
@@ -22,6 +21,7 @@ def get_ip() -> str:
     """IP sur le réseau privé (utilise controller comme route)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # Utilise l'IP du controller (dans le même subnet)
         host = API_URL.split("//")[-1].split(":")[0]
         s.connect((host, 80))
         return s.getsockname()[0]
@@ -32,8 +32,8 @@ def get_ip() -> str:
 
 
 WORKER_IP = get_ip()
-CPU_TOTAL = psutil.cpu_count(logical=True) or 2
-RAM_TOTAL_MB = int(psutil.virtual_memory().total // (1024 * 1024))
+CPU_TOTAL = psutil.cpu_count(logical=True)
+RAM_TOTAL_MB = psutil.virtual_memory().total // (1024 * 1024)
 
 # ────────────────────────────────────────────────────────────
 # DOCKER CLIENT
@@ -157,24 +157,13 @@ def create_container(req: ContainerCreateRequest):
             nano_cpus=int(req.cpu * 1e9),
             network=DOCKER_NETWORK,
             labels=labels,
-            ports={"80/tcp": None},
             restart_policy={"Name": "unless-stopped"},
         )
-
-        container.reload()
-        ports = container.attrs["NetworkSettings"]["Ports"]
-        host_port = None
-        if ports and "80/tcp" in ports:
-            host_port = int(ports["80/tcp"][0]["HostPort"])
-
         print(f"[agent] Created {container_name} (id={container.id[:12]})")
-        
         return {
             "container_id": container.id,
             "container_name": container_name,
             "worker_name": WORKER_NAME,
-            "worker_ip": WORKER_IP,
-            "host_port": host_port,
         }
     except APIError as e:
         raise HTTPException(500, {"code": "RUN_FAILED", "message": str(e)})

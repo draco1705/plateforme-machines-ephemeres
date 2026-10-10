@@ -1,0 +1,354 @@
+---
+- name: Setup Docker and Environment
+  hosts: cluster
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - rsync
+        state: present
+
+    - name: Create /etc/apt/keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu
+          {{ ansible_distribution_release }} stable
+        state: present
+        filename: docker
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    # - name: Install docker compose
+    #   get_url:
+    #     url: https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64
+    #     dest: /usr/local/bin/docker-compose
+    #     mode: '0755'
+    
+    - name: Install Docker Compose plugin
+      apt:
+        name: docker-compose-plugin
+        state: present
+    
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ensure vagrant user is in docker group
+      user:
+        name: vagrant
+        groups: docker
+        append: yes
+
+    - name: Reset SSH connection to apply docker group
+      meta: reset_connection
+
+- name: Deploy Controller Components
+  hosts: controllers
+  become: true
+
+  vars:
+    project_dir: /opt/labhacker
+
+  tasks:
+    - name: Create project base directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Sync project files to controller
+      synchronize:
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ project_dir }}/"
+        delete: false
+        rsync_opts:
+          - "--chown=vagrant:vagrant"
+          - "--exclude=.venv"
+          - "--exclude=**/.venv"
+          - "--exclude=__pycache__"
+          - "--exclude=**/__pycache__"
+          - "--exclude=.git"
+          - "--exclude=node_modules"
+          - "--exclude=infra/vagrant/.vagrant"
+          - "--exclude=.env" 
+        rsync_path: "sudo rsync"
+
+    - name: Create .env file for Controller
+      copy:
+        dest: "{{ project_dir }}/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@lab-postgres:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+          LAB_NETWORK=lab-net
+          DOCKER_SOCKET=/var/run/docker.sock
+    
+    # .env for Docker Compose (root)
+    - name: Create .env file for Docker Compose
+      copy:
+        dest: "{{ project_dir }}/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@lab-postgres:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+          LAB_NETWORK=lab-net
+          DOCKER_SOCKET=/var/run/docker.sock
+      become: true
+      become_user: vagrant
+
+    # .env for API 
+    - name: Create .env for API
+      copy:
+        dest: "{{ project_dir }}/api/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0640"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@localhost:5432/labdb
+          JWT_SECRET=change-me-in-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+          ENV=dev
+      become: true
+      become_user: vagrant
+
+    # .env for Scheduler
+    - name: Create .env for Scheduler
+      copy:
+        dest: "{{ project_dir }}/scheduler/.env"
+        owner: vagrant
+        group: vagrant
+        mode: "0640"
+        content: |
+          DATABASE_URL=postgresql+psycopg2://lab:labpass@localhost:5432/labdb
+          SCHEDULER_INTERVAL_SECONDS=5
+          BATCH_SIZE=10
+      become: true
+      become_user: vagrant
+
+
+    - name: Ensure python3-venv is installed
+      apt:
+        name:
+          - python3-venv
+          - python3-pip
+        state: present
+      become: true
+
+    - name: Create venv for API and install requirements
+      pip:
+        requirements: "{{ project_dir }}/api/requirements.txt"
+        virtualenv: "{{ project_dir }}/api/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Create venv for Scheduler and install requirements
+      pip:
+        requirements: "{{ project_dir }}/scheduler/requirements.txt"
+        virtualenv: "{{ project_dir }}/scheduler/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Start services on controller
+      command:
+        cmd: docker compose up -d
+        chdir: "{{ project_dir }}"
+      become_user: vagrant
+      register: compose_result
+      changed_when: >-
+        ('Created' in compose_result.stdout or 'Created' in compose_result.stderr) or
+        ('Started' in compose_result.stdout or 'Started' in compose_result.stderr) or
+        ('Recreated' in compose_result.stdout or 'Recreated' in compose_result.stderr)
+
+    # - name: Wait for Postgres to be ready
+    #   shell: |
+    #     for i in {1..30}; do
+    #       status=$(docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres 2>/dev/null)
+    #       if [ "$status" = "healthy" ]; then
+    #         echo "healthy"
+    #         exit 0
+    #       fi
+    #       sleep 2
+    #     done
+    #     echo "timeout"
+    #     exit 1
+    #   become_user: vagrant
+    #   register: pg_wait
+    #   changed_when: false
+    #   failed_when: pg_wait.stdout | trim != "healthy"
+
+    - name: Wait for Postgres to be healthy
+      command:
+        cmd: docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres
+      become_user: vagrant
+      register: pg_health
+      until: pg_health.stdout | trim == "healthy"
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: pg_health.stdout | trim != "healthy"
+
+
+    - name: Check running containers
+      command:
+        cmd: docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
+      become_user: vagrant
+      register: containers
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        var: containers.stdout_lines
+      
+- name: Deploy Worker Agent
+  hosts: workers
+  become: true
+  gather_facts: true
+
+  vars:
+    agent_dir: /opt/worker_agent
+    controller_ip: "192.168.56.10"
+
+  tasks:
+    - name: Install python3-venv and pip
+      apt:
+        name:
+          - python3-venv
+          - python3-pip
+          - python3-dev
+        state: present
+        update_cache: true
+
+    - name: Create worker_agent directory
+      file:
+        path: "{{ agent_dir }}"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Copy agent.py
+      copy:
+        src: "{{ inventory_dir }}/../worker_agent/agent.py"
+        dest: "{{ agent_dir }}/agent.py"
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+
+    - name: Copy requirements.txt
+      copy:
+        content: |
+          fastapi==0.115.5
+          uvicorn[standard]==0.32.1
+          docker==7.1.0
+          psutil==6.1.0
+          requests==2.32.3
+          pydantic==2.10.3
+        dest: "{{ agent_dir }}/requirements.txt"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+
+    - name: Create venv and install dependencies
+      pip:
+        requirements: "{{ agent_dir }}/requirements.txt"
+        virtualenv: "{{ agent_dir }}/.venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+    - name: Create systemd unit for worker-agent
+      copy:
+        dest: /etc/systemd/system/worker-agent.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker Worker Agent
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ agent_dir }}
+          Environment=CONTROLLER_API_URL=http://{{ controller_ip }}:8000
+          Environment=WORKER_NAME={{ inventory_hostname }}
+          Environment=WORKER_PORT=8001
+          Environment=HEARTBEAT_INTERVAL=10
+          Environment=DOCKER_NETWORK=lab-net
+          Environment=MAX_CONTAINERS=4
+          ExecStart={{ agent_dir }}/.venv/bin/python {{ agent_dir }}/agent.py
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/worker-agent.log
+          StandardError=append:/var/log/worker-agent.err
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and restart worker-agent
+      systemd:
+        name: worker-agent
+        daemon_reload: true
+        state: restarted
+        enabled: true
+
+    - name: Wait for worker-agent to be ready
+      uri:
+        url: "http://{{ ansible_host }}:8001/health"
+        return_content: true
+        timeout: 5
+      register: worker_health
+      until: worker_health.status == 200
+      retries: 20
+      delay: 2
+      changed_when: false
+
+    - name: Display worker health
+      debug:
+        msg: "{{ inventory_hostname }}: {{ worker_health.json }}"

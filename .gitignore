@@ -8,10 +8,11 @@ __pycache__/
 # Virtual environments
 .venv/
 **/.venv/
+.vagrant/
 
 # Env files (secrets!)
 .env
-*.env
+**/.env
 !.env.example
 !.env.exemple
 
@@ -36,3 +37,5 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+test.txt

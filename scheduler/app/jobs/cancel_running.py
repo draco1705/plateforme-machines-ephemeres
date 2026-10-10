@@ -24,18 +24,16 @@ def cancel_running(batch_size: int = 20) -> int:
 
         if not to_clean:
             return 0
-        try:
-            cmgr = ContainerManager()
-        except ContainerError as e:
-            print(f"[scheduler] Docker indisponible: {e.message} — skip cancel")
-            return 0
-
+        
+        cmgr = ContainerManager()
         for r in to_clean:
-            # Detruire conteneur
-            try:
-                cmgr.remove_container(r.container_id)
-            except ContainerError as e:
-                print(f"[scheduler] cancel #{r.id} — remove échoué: {e.message}")
+            if r.container_id and r.worker_id:
+                worker = db.get(Worker, r.worker_id)
+                if worker:
+                    try:
+                        cmgr.remove_container(worker, r.container_id)
+                    except ContainerError as e:
+                        print(f"[scheduler] cancel #{r.id} — remove échoué: {e.message}")
 
             # Liberer ressources
             if r.worker_id is not None:
