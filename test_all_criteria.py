@@ -64,6 +64,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_test_data():
+    app.dependency_overrides[get_db] = override_get_db
     db = TestingSessionLocal()
     if not db.query(User).filter_by(email='admin@lab.local').first():
         db.add(User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin'))
@@ -84,6 +85,8 @@ def setup_test_data():
         db.add(Machine(name='ubuntu', image='ubuntu:latest', cpu_min=1, ram_min_mb=512, port=22, enabled=True))
     db.commit()
     db.close()
+    yield
+    app.dependency_overrides.pop(get_db, None)
 
 # -----------------------------------------------------------------------------
 # 1. UNIT TESTS & RESOURCE MANAGER TESTS
