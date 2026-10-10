@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """CLI entrypoint shortcut for labctl."""
 import sys
 from pathlib import Path

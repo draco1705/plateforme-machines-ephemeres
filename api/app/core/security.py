@@ -1,18 +1,22 @@
-# api/app/core/security.py
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from jose import jwt
-from passlib.context import CryptContext
 
 from app.config import settings
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(p: str) -> str:
-     return pwd.hash(p)
+    pwd_bytes = p.encode("utf-8")[:72]
+    return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
 
-def verify_password(p:str, h:str) -> bool:
-     return pwd.verify(p, h)
+
+def verify_password(p: str, h: str) -> bool:
+    pwd_bytes = p.encode("utf-8")[:72]
+    try:
+        return bcrypt.checkpw(pwd_bytes, h.encode("utf-8"))
+    except Exception:
+        return False
 
 def create_token(user_id: int) -> str:
      payload = {
