@@ -1,5 +1,5 @@
 # api/app/core/security.py
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -17,7 +17,7 @@ def verify_password(p:str, h:str) -> bool:
 def create_token(user_id: int) -> str:
      payload = {
           "sub": str(user_id),
-          "exp": datetime.now(timezone.utc) + timedelta(minutes = settings.JWT_EXPIRE_MINUTES)
+          "exp": datetime.now(UTC) + timedelta(minutes = settings.JWT_EXPIRE_MINUTES)
      }
      return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 

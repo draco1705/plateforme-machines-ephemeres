@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 import pytest
 from sqlalchemy import create_engine
@@ -10,7 +11,7 @@ sys.path.insert(0, os.path.abspath('scheduler'))
 
 from app.database import Base
 from app.models.worker import Worker
-from app.services.ressource_manager import RessourceManager, RessourceError
+from app.services.ressource_manager import RessourceError, RessourceManager
 
 SQLALCHEMY_DATABASE_URL = 'sqlite:///:memory:'
 engine = create_engine(
@@ -77,7 +78,7 @@ def test_resource_manager_allocation_and_release():
     assert updated_worker2.status == 'BUSY'
 
     # 4. Try reserving when full (should raise error)
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         manager.reserve(cpu=1, ram_mb=512, worker_id=selected.id)
 
     # 5. Release resources

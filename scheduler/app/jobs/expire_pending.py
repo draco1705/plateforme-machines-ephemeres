@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from app.database import SessionLocal
 from app.models.reservation import Reservation
@@ -12,7 +12,7 @@ def expire_pending_timeout() -> int:
      db = SessionLocal()
      count=0
      try:
-          cutoff = datetime.now(timezone.utc) - timedelta(minutes=MAX_PENDING_MINUTES)
+          cutoff = datetime.now(UTC) - timedelta(minutes=MAX_PENDING_MINUTES)
           stmt = (
                select(Reservation)
                .where(

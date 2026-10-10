@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from app.database import SessionLocal
 from app.models.machine import Machine
@@ -15,7 +15,7 @@ def process_pending(batch_size: int = 10) -> int:
      db = SessionLocal()
      processed = 0
      try:
-          now = datetime.now(timezone.utc)
+          now = datetime.now(UTC)
           stmt = (
                select(Reservation)
                .where(Reservation.status == "PENDING")

@@ -1,6 +1,7 @@
 import datetime
 import os
 import sys
+
 import pytest
 
 sys.path.insert(0, os.path.abspath('api'))
@@ -37,7 +38,7 @@ for table in Base.metadata.sorted_tables:
 
 def set_created_at(mapper, connection, target):
     if hasattr(target, 'created_at') and target.created_at is None:
-        target.created_at = datetime.datetime.now(datetime.timezone.utc)
+        target.created_at = datetime.datetime.now(datetime.UTC)
 
 for mapper in Base.registry.mappers:
     event.listen(mapper.class_, 'before_insert', set_created_at)
