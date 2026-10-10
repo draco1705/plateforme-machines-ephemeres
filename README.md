@@ -198,6 +198,9 @@ docker compose down
 docker compose logs -f traefik
 docker compose logs -f postgres
 
+# Run comprehensive test suite (Unit, API, Integration, Security, Resilience)
+.\api\.venv\Scripts\python.exe test_all_criteria.py
+
 # Reset DB (⚠️ deletes everything)
 docker compose down -v
 docker compose up -d

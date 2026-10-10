@@ -1,5 +1,5 @@
 sqlalchemy==2.0.35
 psycopg2-binary>=2.9.10
-pydantic==2.9.2
-pydantic-settings==2.5.2
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
 docker==7.1.0

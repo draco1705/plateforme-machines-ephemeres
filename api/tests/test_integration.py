@@ -1,6 +1,7 @@
 import datetime
 import os
 import sys
+import pytest
 
 sys.path.insert(0, os.path.abspath('api'))
 
@@ -53,15 +54,18 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
+@pytest.fixture(autouse=True)
 def setup_db():
     db = TestingSessionLocal()
-    # Add admin user as well for admin tests
-    admin_user = User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin')
-    db.add(admin_user)
-    w = Worker(name='worker_test', ip='10.0.0.99', cpu_total=8, ram_total_mb=8192, cpu_used=0, ram_used_mb=0, max_containers=20, container_count=0, status='AVAILABLE')
-    db.add(w)
-    m = Machine(name='ubuntu', image='ubuntu:latest', cpu_min=1, ram_min_mb=512, port=22, enabled=True)
-    db.add(m)
+    if not db.query(User).filter_by(email='admin@lab.local').first():
+        admin_user = User(email='admin@lab.local', password_hash=hash_password('admin12345'), role='admin')
+        db.add(admin_user)
+    if not db.query(Worker).filter_by(name='worker_test').first():
+        w = Worker(name='worker_test', ip='10.0.0.99', cpu_total=8, ram_total_mb=8192, cpu_used=0, ram_used_mb=0, max_containers=20, container_count=0, status='AVAILABLE')
+        db.add(w)
+    if not db.query(Machine).filter_by(name='ubuntu').first():
+        m = Machine(name='ubuntu', image='ubuntu:latest', cpu_min=1, ram_min_mb=512, port=22, enabled=True)
+        db.add(m)
     db.commit()
     db.close()
 
