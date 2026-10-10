@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labctl"
+version = "0.1.0"
+description = "CLI for Plateforme Machines Éphémères"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+    "rich>=13.7.0",
+]
+
+[project.scripts]
+labctl = "labctl.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["labctl*"] 

@@ -1,0 +1,3 @@
+---
+# Import or include setup.yml for unified deployment testing
+- import_playbook: setup.yml

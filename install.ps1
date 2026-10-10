@@ -32,7 +32,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 # ------------------------------------------
 # Python
 # ------------------------------------------
-Write-Host "[1/5] Checking Python..." -ForegroundColor Yellow
+Write-Host "[1/4] Checking Python..." -ForegroundColor Yellow
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Write-Host "Python is not installed. Installing..."
@@ -50,7 +50,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 # Docker Desktop
 # ------------------------------------------
 Write-Host ""
-Write-Host "[2/5] Checking Docker..." -ForegroundColor Yellow
+Write-Host "[2/4] Checking Docker..." -ForegroundColor Yellow
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Host "Docker is not installed. Installing Docker Desktop..."
@@ -68,7 +68,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 # Vagrant
 # ------------------------------------------
 Write-Host ""
-Write-Host "[3/5] Checking Vagrant..." -ForegroundColor Yellow
+Write-Host "[3/4] Checking Vagrant..." -ForegroundColor Yellow
 
 if (-not (Get-Command vagrant -ErrorAction SilentlyContinue)) {
     Write-Host "Vagrant is not installed. Installing..."
@@ -86,7 +86,7 @@ if (-not (Get-Command vagrant -ErrorAction SilentlyContinue)) {
 # WSL2
 # ------------------------------------------
 Write-Host ""
-Write-Host "[4/5] Checking WSL2..." -ForegroundColor Yellow
+Write-Host "[4/4] Checking WSL2..." -ForegroundColor Yellow
 
 $wslInstalled = Get-Command wsl -ErrorAction SilentlyContinue
 
@@ -97,35 +97,6 @@ if (-not $wslInstalled) {
     Write-Host "WSL is already installed."
 }
 
-# ------------------------------------------
-# Python virtual environment
-# ------------------------------------------
-Write-Host ""
-Write-Host "[5/5] Setting up Python virtual environment..." -ForegroundColor Yellow
-
-if (-not (Test-Path ".venv")) {
-    Write-Host "Creating .venv..."
-    python -m venv .venv
-} else {
-    Write-Host ".venv already exists."
-}
-
-# ------------------------------------------
-# Install Python dependencies
-# ------------------------------------------
-Write-Host ""
-Write-Host "Installing Python dependencies..."
-& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-
-if (Test-Path "requirements.txt") {
-    & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
-} else {
-    Write-Host "WARNING: requirements.txt not found." -ForegroundColor Yellow
-}
-
-# ------------------------------------------
-# Verification
-# ------------------------------------------
 # ------------------------------------------
 # Verification
 # ------------------------------------------
@@ -138,7 +109,7 @@ $VerificationFailed = $false
 
 # Python
 Write-Host ""
-Write-Host "[1/6] Python..." -ForegroundColor Yellow
+Write-Host "[1/4] Python..." -ForegroundColor Yellow
 
 if (Get-Command python -ErrorAction SilentlyContinue) {
     python --version
@@ -149,7 +120,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
 
 # Docker
 Write-Host ""
-Write-Host "[2/6] Docker..." -ForegroundColor Yellow
+Write-Host "[2/4] Docker..." -ForegroundColor Yellow
 
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker --version
@@ -161,7 +132,7 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 
 # Vagrant
 Write-Host ""
-Write-Host "[3/6] Vagrant..." -ForegroundColor Yellow
+Write-Host "[3/4] Vagrant..." -ForegroundColor Yellow
 
 if (Get-Command vagrant -ErrorAction SilentlyContinue) {
     vagrant --version
@@ -172,50 +143,12 @@ if (Get-Command vagrant -ErrorAction SilentlyContinue) {
 
 # WSL2
 Write-Host ""
-Write-Host "[4/6] WSL2..." -ForegroundColor Yellow
+Write-Host "[4/4] WSL2..." -ForegroundColor Yellow
 
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
     wsl --version
 } else {
     Write-Host "ERROR: WSL2 not found." -ForegroundColor Red
-    $VerificationFailed = $true
-}
-
-# Python virtual environment
-Write-Host ""
-Write-Host "[5/6] Python virtual environment..." -ForegroundColor Yellow
-
-$VenvPython = ".\.venv\Scripts\python.exe"
-
-if (Test-Path $VenvPython) {
-    & $VenvPython --version
-} else {
-    Write-Host "ERROR: .venv not found." -ForegroundColor Red
-    $VerificationFailed = $true
-}
-
-# Python packages
-Write-Host ""
-Write-Host "[6/6] Python packages..." -ForegroundColor Yellow
-
-if (Test-Path $VenvPython) {
-
-    & $VenvPython -m pip show ansible
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Ansible is not installed in .venv." -ForegroundColor Red
-        $VerificationFailed = $true
-    }
-
-    & $VenvPython -m pip show docker
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Docker Python package is not installed in .venv." -ForegroundColor Red
-        $VerificationFailed = $true
-    }
-
-} else {
-    Write-Host "ERROR: Cannot verify Python packages." -ForegroundColor Red
     $VerificationFailed = $true
 }
 
@@ -234,7 +167,6 @@ if ($VerificationFailed) {
     Write-Host " Installation and verification completed!" -ForegroundColor Green
     Write-Host "==========================================" -ForegroundColor Green
 }
-
-"=========================================="
+Write-Host "=========================================="
 Write-Host "Done!"
 Write-Host "=========================================="

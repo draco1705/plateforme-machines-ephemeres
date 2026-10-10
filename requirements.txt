@@ -1,10 +1,13 @@
-fastapi==0.115.12
-uvicorn[standard]==0.34.0
-sqlalchemy==2.0.38
-psycopg[binary]==3.2.6
-alembic==1.15.1
-pydantic-settings==2.8.1
-PyJWT==2.10.1
-pwdlib[argon2]==0.2.1
-email-validator==2.2.0
+# Deployment tools (F10-F11)
+ansible==10.7.0
+ansible-core==2.17.6
+
+# Docker SDK (cho scripts quản lý)
+docker==7.1.0
+
+# HTTP client (test API)
+requests==2.32.3
 httpx==0.28.1
+
+# Config
+python-dotenv==1.0.1
