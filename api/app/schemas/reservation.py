@@ -24,6 +24,7 @@ class ReservationOut(ORMBase):
     start_time: datetime
     end_time: datetime
     access_url: str | None
+    ssh_port: int | None
 
 class ReservationSummary(ORMBase):
     id: int

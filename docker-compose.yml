@@ -67,5 +67,5 @@ volumes:
 
 networks:
   lab-net:
-    name: lab-net
-    driver: bridge
+    external: true
+

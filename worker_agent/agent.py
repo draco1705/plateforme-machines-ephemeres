@@ -215,7 +215,7 @@ def create_container(req: ContainerCreateRequest):
             nano_cpus=int(req.cpu * 1e9),
             network=DOCKER_NETWORK,
             labels=labels,
-            ports={"80/tcp": None},
+            ports={"22/tcp": None},
             restart_policy={"Name": "unless-stopped"},
         )
 

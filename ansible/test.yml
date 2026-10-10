@@ -68,6 +68,12 @@
         name: vagrant
         groups: docker
         append: yes
+    
+    - name: Ensure lab-net bridge network exists on all nodes
+      community.docker.docker_network:
+        name: lab-net
+        driver: bridge
+        state: present
 
     - name: Reset SSH connection to apply docker group
       meta: reset_connection
@@ -89,7 +95,7 @@
         mode: "0755"
 
     - name: Sync project files to controller
-      synchronize:
+      ansible.posix.synchronize:
         src: "{{ playbook_dir }}/../"
         dest: "{{ project_dir }}/"
         delete: false
@@ -103,6 +109,7 @@
           - "--exclude=node_modules"
           - "--exclude=infra/vagrant/.vagrant"
           - "--exclude=.env" 
+          - "--exclude=certs" 
         rsync_path: "sudo rsync"
 
     - name: Create .env file for Controller
@@ -190,6 +197,93 @@
         requirements: "{{ project_dir }}/scheduler/requirements.txt"
         virtualenv: "{{ project_dir }}/scheduler/.venv"
         virtualenv_command: python3 -m venv
+      become: true
+      become_user: vagrant
+
+     # ─────────────────────────────────────────────────────
+    # F8 : Generate SSL certificates in Controller VM
+    # ─────────────────────────────────────────────────────
+    - name: Ensure certs directory exists
+      file:
+        path: "{{ project_dir }}/certs"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+      become: true
+      become_user: vagrant
+
+    - name: Check if certificate exists
+      stat:
+        path: "{{ project_dir }}/certs/lab.local.crt"
+      register: cert_crt
+
+    - name: Check if private key exists
+      stat:
+        path: "{{ project_dir }}/certs/lab.local.key"
+      register: cert_key
+
+    - name: Generate self-signed certificate for *.lab.local
+      shell: |
+        docker run --rm \
+          -v "{{ project_dir }}/certs:/certs" \
+          alpine/openssl req -x509 -nodes -days 365 \
+            -newkey rsa:2048 \
+            -keyout /certs/lab.local.key \
+            -out /certs/lab.local.crt \
+            -subj "/CN=*.lab.local" \
+            -addext "subjectAltName=DNS:*.lab.local,DNS:lab.local"
+      when: not cert_crt.stat.exists or not cert_key.stat.exists
+      become: true
+      become_user: vagrant
+
+    - name: Fix certificate ownership
+      file:
+        path: "{{ project_dir }}/certs/{{ item }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+      loop:
+        - lab.local.crt
+        - lab.local.key
+      become: true
+
+    - name: Ensure traefik-dynamic directory exists
+      file:
+        path: "{{ project_dir }}/traefik-dynamic"
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0755"
+      become: true
+      become_user: vagrant
+
+    - name: Create traefik-dynamic/tls.yml
+      copy:
+        dest: "{{ project_dir }}/traefik-dynamic/tls.yml"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+        content: |
+          tls:
+            certificates:
+              - certFile: /certs/lab.local.crt
+                keyFile:  /certs/lab.local.key
+            stores:
+              default:
+                defaultCertificate:
+                  certFile: /certs/lab.local.crt
+                  keyFile:  /certs/lab.local.key
+
+          http:
+            middlewares:
+              security-headers:
+                headers:
+                  stsSeconds: 31536000
+                  stsIncludeSubdomains: true
+                  contentTypeNosniff: true
+                  browserXssFilter: true
+                  referrerPolicy: "strict-origin-when-cross-origin"
       become: true
       become_user: vagrant
 

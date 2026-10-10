@@ -1,7 +1,8 @@
 Vagrant.configure("2") do |config|
   # config.vm.box = "ubuntu/focal64"
   config.vm.box = "ubuntu/jammy64"
-
+  config.vm.boot_timeout = 600
+  config.ssh.extra_args = ["-o", "PubkeyAcceptedKeyTypes=+ssh-rsa"]
   # Add all cluster hosts
   $update_hosts = <<-SHELL
     sudo tee -a /etc/hosts > /dev/null <<'EOF'

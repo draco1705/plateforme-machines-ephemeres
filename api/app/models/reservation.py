@@ -28,3 +28,4 @@ class Reservation(Base):
     start_time   = Column(DateTime(timezone=True), server_default=func.now())
     end_time     = Column(DateTime(timezone=True), nullable=False)
     access_url   = Column(String(255), nullable=True)
+    ssh_port     = Column(Integer, nullable=True)

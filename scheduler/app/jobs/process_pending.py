@@ -56,6 +56,9 @@ def process_pending(batch_size: int = 10) -> int:
                try:
                     result = cmgr.create_container(worker, r, machine)
                     container_id = result["container_id"]
+                    worker_ip = result.get("worker_ip", worker.ip)
+                    ssh_port = result.get("ssh_port")
+                    r.access_url = f"ssh://root@{worker_ip}:{ssh_port}"
                except ContainerError as e:
                     r.status = "FAILED"
                     log_event(db, r.id, from_status="PENDING", to_status="FAILED",reason=f"container_creation_failed: {e.code}")
