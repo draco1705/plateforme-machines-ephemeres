@@ -1,11 +1,11 @@
 from pathlib import Path
-import docker
-from docker.errors import APIError, DockerException, ImageNotFound
-import httpx
 
+import docker
+import httpx
 from app.models.machine import Machine
 from app.models.reservation import Reservation
 from app.models.worker import Worker
+from docker.errors import APIError, DockerException, ImageNotFound
 
 TRAEFIK_DYNAMIC_DIR = Path("/opt/labhacker/traefik-dynamic")
 

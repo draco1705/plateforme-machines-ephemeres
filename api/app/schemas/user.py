@@ -1,8 +1,11 @@
 # app/schemas/user.py
-from datetime import datetime
 import re
-from pydantic import BaseModel, field_validator, EmailStr, Field
+from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
 from app.schemas.common import ORMBase
+
 
 class UserCreate(BaseModel):
     email: EmailStr

@@ -8,7 +8,6 @@ from app.models.worker import Worker
 
 class RessourceError(Exception):
     """Erreur de gestion de ressources"""
-    pass
 
 
 class RessourceManager:

@@ -1,18 +1,18 @@
 """Labctl — CLI for Plateforme Machines Éphémères."""
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 import sys
 import time
-import urllib3
 import webbrowser
+from datetime import UTC, datetime, timezone
 
 import requests
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
+import urllib3
 from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 # Suppress insecure SSL warnings for self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -67,8 +67,8 @@ def format_remaining_time(end_time_str):
         return "-"
     try:
         # Parse ISO date
-        end = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
+        end = datetime.fromisoformat(end_time_str)
+        now = datetime.now(UTC)
         diff = end - now
         if diff.total_seconds() <= 0:
             return "[dim]Expiré[/dim]"
@@ -420,12 +420,12 @@ def cmd_exec(args):
     container_name = f"lab-reservation-{args.id}"
     cmd = args.cmd if args.cmd else ["/bin/sh"]
 
-    import subprocess
     import shutil
+    import subprocess
     if shutil.which("docker"):
         print_info(f"Exécution de {' '.join(cmd)} dans {container_name}...")
         try:
-            subprocess.run(["docker", "exec", "-it", container_name, *cmd])
+            subprocess.run(["docker", "exec", "-it", container_name, *cmd], check=False)
             return
         except Exception as e:
             print_error(f"Erreur docker exec : {e}")
@@ -436,13 +436,13 @@ def cmd_exec(args):
 
 def cmd_ssh(args):
     """Ouvre une session SSH interactive dans le conteneur."""
-    import subprocess
     import shutil
+    import subprocess
     host = f"lab-{args.id}.lab.local"
     print_info(f"Connexion SSH vers root@{host} (mot de passe par défaut : kali)...")
     if shutil.which("ssh"):
         try:
-            subprocess.run(["ssh", "-o", "StrictHostKeyChecking=no", f"root@{host}", "-p", str(args.port)])
+            subprocess.run(["ssh", "-o", "StrictHostKeyChecking=no", f"root@{host}", "-p", str(args.port)], check=False)
             return
         except Exception as e:
             print_error(f"Erreur client SSH : {e}")

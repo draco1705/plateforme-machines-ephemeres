@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from datetime import UTC, datetime, timedelta, timezone
+
 from app.database import SessionLocal
 from app.models.machine import Machine
 from app.models.reservation import Reservation
@@ -7,6 +7,7 @@ from app.models.worker import Worker
 from app.services.container_manager import ContainerError, ContainerManager
 from app.services.reservation_events import log_event
 from app.services.ressource_manager import RessourceManager
+from sqlalchemy import select
 
 WORKER_HEARTBEAT_TIMEOUT_SECONDS = 30
 
@@ -20,7 +21,7 @@ def check_and_auto_heal(batch_size: int = 10) -> int:
     repaired_count = 0
     try:
         # 1. Marquer OFFLINE les workers dont le heartbeat est trop ancien (US43)
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=WORKER_HEARTBEAT_TIMEOUT_SECONDS)
+        cutoff = datetime.now(UTC) - timedelta(seconds=WORKER_HEARTBEAT_TIMEOUT_SECONDS)
         db.query(Worker).filter(
             Worker.last_heartbeat < cutoff,
             Worker.status.notin_(["OFFLINE", "MAINTENANCE"])

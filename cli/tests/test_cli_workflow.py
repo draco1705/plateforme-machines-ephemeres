@@ -1,21 +1,23 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath("api"))
 
-from fastapi.testclient import TestClient
+from app.core.security import hash_password
 from app.database import Base, get_db
 from app.main import app
-from app.models.user import User
 from app.models.machine import Machine
-from app.core.security import hash_password
-from cli.labctl.main import main
+from app.models.user import User
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from cli.labctl.main import main
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(
@@ -37,9 +39,10 @@ for table in Base.metadata.sorted_tables:
 
 from sqlalchemy import event
 
+
 def set_created_at(mapper, connection, target):
     if hasattr(target, "created_at") and getattr(target, "created_at", None) is None:
-        target.created_at = datetime.now(timezone.utc)
+        target.created_at = datetime.now(UTC)
 
 for mapper in Base.registry.mappers:
     event.listen(mapper.class_, "before_insert", set_created_at)

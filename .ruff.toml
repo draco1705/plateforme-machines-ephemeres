@@ -7,6 +7,7 @@ ignore = [
     "F541", # F-string without placeholders
     "ISC004", # Implicit string concatenation
     "RUF022", # Unsorted __all__
+    "S110",   # try-except-pass
 ]
 exclude = [
     ".venv",

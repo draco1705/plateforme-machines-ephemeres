@@ -69,15 +69,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install API & Scheduler dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt
           pip install -r scheduler/requirements.txt
+          pip install -r worker_agent/requirements.txt
+          pip install -e cli/
 
       - name: Run Integration and Component Tests
+        env:
+          PYTHONPATH: .
         run: |
-          pip install rich
           python -m pytest api/tests/ scheduler/tests/ cli/tests/ worker_agent/test_agent_endpoints.py
           python test_all_criteria.py
 
