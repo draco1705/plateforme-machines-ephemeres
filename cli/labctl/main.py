@@ -405,6 +405,50 @@ def cmd_connect(args):
         webbrowser.open(access_url)
 
 
+def cmd_exec(args):
+    """Exécute une commande ou démarre un shell directement dans le conteneur."""
+    headers = auth_headers()
+    r = requests.get(f"{API_URL}/reservations/{args.id}", headers=headers)
+    if r.status_code != 200:
+        print_error(f"Réservation #{args.id} introuvable : {r.status_code}")
+        sys.exit(1)
+    res = r.json()
+    if res.get("status") != "RUNNING":
+        print_error(f"La réservation #{args.id} n'est pas active (statut: {res.get('status')})")
+        sys.exit(1)
+
+    container_name = f"lab-reservation-{args.id}"
+    cmd = args.cmd if args.cmd else ["/bin/sh"]
+
+    import subprocess
+    import shutil
+    if shutil.which("docker"):
+        print_info(f"Exécution de {' '.join(cmd)} dans {container_name}...")
+        try:
+            subprocess.run(["docker", "exec", "-it", container_name, *cmd])
+            return
+        except Exception as e:
+            print_error(f"Erreur docker exec : {e}")
+
+    host = f"lab-{args.id}.lab.local"
+    print_info(f"Alternative SSH : ssh root@{host} -p 22 '{' '.join(cmd)}'")
+
+
+def cmd_ssh(args):
+    """Ouvre une session SSH interactive dans le conteneur."""
+    import subprocess
+    import shutil
+    host = f"lab-{args.id}.lab.local"
+    print_info(f"Connexion SSH vers root@{host} (mot de passe par défaut : kali)...")
+    if shutil.which("ssh"):
+        try:
+            subprocess.run(["ssh", "-o", "StrictHostKeyChecking=no", f"root@{host}", "-p", str(args.port)])
+            return
+        except Exception as e:
+            print_error(f"Erreur client SSH : {e}")
+    print_info(f"Commande SSH manuelle : ssh root@{host} -p {args.port} (mdp: kali)")
+
+
 # ─── MAIN ───────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
@@ -461,6 +505,18 @@ def main():
     p.add_argument("--wait", action="store_true", help="Attendre que le conteneur soit en RUNNING")
     p.add_argument("--browser", action="store_true", help="Ouvrir automatiquement dans le navigateur")
     p.set_defaults(func=cmd_connect)
+
+    # exec
+    p = sub.add_parser("exec", help="Exécuter une commande ou shell directement dans le conteneur")
+    p.add_argument("id", type=int, help="ID de la réservation")
+    p.add_argument("cmd", nargs="*", default=["/bin/sh"], help="Commande à exécuter (défaut: /bin/sh)")
+    p.set_defaults(func=cmd_exec)
+
+    # ssh
+    p = sub.add_parser("ssh", help="Se connecter en SSH au conteneur")
+    p.add_argument("id", type=int, help="ID de la réservation")
+    p.add_argument("--port", type=int, default=22, help="Port SSH (défaut: 22)")
+    p.set_defaults(func=cmd_ssh)
 
     # start
     p = sub.add_parser("start", help="Démarrer une réservation")

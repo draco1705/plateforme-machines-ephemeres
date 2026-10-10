@@ -1,208 +1,226 @@
-# Ephemeral Machines Platform
+# Ephemeral Machines Platform (Lab Hacker)
 
-Platform for deploying and managing **ephemeral machines** (Docker containers) using Docker, Vagrant, and Ansible — in the spirit of an automated "hacker lab".
+Platform for provisioning, configuring, and managing ephemeral machines as Docker containers using FastAPI, PostgreSQL, Traefik, Vagrant, and Ansible.
 
-## Architecture
+## Architecture Overview
 
-- **REST API** (FastAPI) — user entry points
-- **Scheduler** — daemon that allocates/releases resources
-- **Worker Agent** — executes containers on each worker
-- **PostgreSQL** — database
-- **Traefik** — dynamic reverse proxy (HTTPS)
-- **CLI** `labctl` — command-line user interface
+The system consists of the following components:
+
+- REST API (FastAPI): Handles user authentication, machine templates, reservations, and worker registry.
+- Scheduler: Background daemon that monitors pending reservations, enforces resource constraints, provisions containers, tracks expiration, and auto-heals failed workloads.
+- Worker Agent: Service running on each worker node reporting hardware capacity and handling container lifecycle requests.
+- Traefik Reverse Proxy: Dynamic reverse proxy providing automated HTTPS routing and domain resolution per container.
+- PostgreSQL: Relational database storing users, workers, machine templates, reservations, and event logs.
+- Dedicated CLI (labctl): Command-line tool for users to manage sessions, reserve machines, and access containers.
+
+## How Users Interact With The Platform
+
+Users interact with the platform on two distinct levels:
+
+1. Platform Control Level (Cluster and Resource Management):
+   Users use the CLI (`labctl`) or REST API to browse templates, request ephemeral machines, inspect remaining time, and release allocations. The scheduler assigns requests to available workers.
+
+2. Container Execution Level (Direct In-Container Access):
+   Users do not just control workers; they execute commands and run software directly inside their ephemeral containers:
+   - Interactive Shell: Run `python cli/labctl.py exec <id>` to drop directly into a shell inside the container.
+   - SSH Access: For Linux/Kali containers with SSH enabled, connect via `python cli/labctl.py ssh <id>` or `ssh root@lab-<id>.lab.local -p 22` (default password: `kali`).
+   - Web Access: Access web services through Traefik HTTPS at `https://lab-<id>.lab.local`.
 
 ## Prerequisites
 
-| Tool | Minimum Version | Installation |
-|---|---|---|
-| Python | 3.11+ | https://python.org |
-| Docker Desktop | 4.x | https://docker.com/products/docker-desktop |
-| Vagrant | 2.4+ | https://vagrantup.com |
-| VirtualBox | 7.x | https://virtualbox.org (for Vagrant) |
-| Git | 2.40+ | https://git-scm.com |
+- Operating System: Windows, Linux, or macOS
+- Python: Version 3.11 or higher
+- Docker and Docker Compose
+- VirtualBox and Vagrant (optional, required only for multi-VM cluster mode)
+- Git
 
-> **Note**: Ansible is automatically installed within the Python `.venv`, no need to install it globally.
+## Getting Started
 
-## Installation
+### Option A: Local Standalone Mode (Fastest)
 
-### Step 1 — Clone the project
+This mode runs PostgreSQL and Traefik in Docker, while the API and Scheduler run on the host.
 
+1. Start database and reverse proxy:
 ```bash
-git clone <repo-url>
-cd plateforme-machines-ephemeres
+docker compose up -d
 ```
 
-### Step 2 — Install system tools
-Windows (PowerShell as Administrator):
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\install.ps1
-```
-Linux / macOS:
+2. Initialize database schema and default seed data:
 ```bash
-chmod +x install.sh
-./install.sh
-```
-
-### Step 3 — Project setup
-
-Windows:
-```powershell
-.\setup.ps1
-```
-Linux / macOS:
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-
-### Step 4 — Run services
-Terminal 1 — API:
-```powershell
 cd api
+python -m venv .venv
+# Windows:
 .\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+# Linux/macOS:
+# source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+python seed.py
+cd ..
 ```
-Terminal 2 — Scheduler:
+
+3. Configure local DNS resolution (one-time setup):
+- Windows (Run PowerShell as Administrator):
 ```powershell
+.\scripts\update-hosts.ps1
+```
+- Linux / macOS:
+```bash
+sudo ./scripts/update-hosts.sh
+```
+
+4. Start REST API (Terminal 1):
+```bash
+cd api
+# Activate venv
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+5. Start Scheduler (Terminal 2):
+```bash
 cd scheduler
-.\.venv\Scripts\Activate.ps1
+python -m venv .venv
+# Activate venv
+pip install -r requirements.txt
 python -m app.main
 ```
 
-### Step 5 — Test
-Swagger API: http://localhost:8000/docs
+### Option B: Multi-VM Cluster Mode (Vagrant and Ansible)
 
-Traefik Dashboard: http://localhost:8080
+This mode deploys 1 Controller VM (`192.168.56.10`) and 3 Worker VMs (`192.168.56.11-13`).
 
-Reserved Lab: https://lab-1.lab.local
-
-## Security & Best Practices
-
-The platform integrates several robust security mechanisms:
-
-1. **Input Validation**: Use of Pydantic to strictly validate all payloads (types, email formats, CPU/RAM limits, reservation durations).
-2. **Authentication**: JWT (JSON Web Token) authentication with expiration and secure password hashing via **Bcrypt** (`passlib`).
-3. **Authorization (RBAC & Ownership)**: Role-based access control (`admin` vs `user`) for sensitive actions (machine management, worker statuses) and strict verification of resource ownership (users can only access their own reservations).
-4. **Endpoint Protection**:
-   - Configured **CORS** middleware.
-   - Strict HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`).
-5. **Proper Error Handling**: Centralized exceptions (`AppError`), graceful database integrity error handling (`IntegrityError`), and structured JSON responses without technical stack trace leaks.
-
-### Container Security
-
-To guarantee isolation and integrity of ephemeral environments executed on workers, containers follow these best practices:
-- **Minimal Image**: Use of lean or optimized base images combined with systematic package cache cleanup (`apt-get clean && rm -rf /var/lib/apt/lists/*`) to reduce the attack surface.
-- **Non-Root User**: Running containers with restricted privileges (non-root user or dedicated `nobody` account) when administrative privileges are not required by the lab.
-- **CPU/RAM Limitation**: Strict and dynamic resource allocation to each container according to reservation parameters (`mem_limit` and `nano_cpus` via the Docker API), preventing saturation or Denial of Service (DoS) attacks.
-- **Network Isolation**: Attaching all ephemeral containers to the isolated `lab-net` Docker bridge network. No raw ports are exposed directly on the host; all incoming traffic is filtered, compartmentalized, and routed by the Traefik reverse proxy via TLS.
-- **No Secrets in Image**: Absolute absence of secrets, private keys, passwords, or hardcoded tokens in Dockerfiles or images. Sensitive configurations are injected dynamically at runtime (via `.env` environment variables or secure volumes).
-
-### Secret Management
-
-The platform enforces a rigorous secret management and protection policy:
-- **Environment Variables**: All sensitive settings (`DATABASE_URL`, `JWT_SECRET`, database passwords) are injected exclusively via environment variables read by Pydantic (`BaseSettings`).
-- **`.env` Excluded from Git**: The `.env` file and all local configuration files containing secrets are strictly excluded from version control via `.gitignore`. Only the `.env.example` template without real values is versioned.
-- **CI/CD Secrets**: Continuous integration and deployment pipelines (GitHub Actions / GitLab CI) securely store and inject production secrets (via encrypted repository *Secrets*), without ever exposing them in build logs.
-- **Ansible Vault**: Confidential variables and SSH/deployment access keys used during Ansible provisioning are encrypted via **Ansible Vault** (`ansible-vault encrypt`), ensuring no plaintext passwords transit in playbooks.
-- **Secret Rotation**: A regular rotation procedure is in place to periodically renew secret keys (`JWT_SECRET`, DB secrets) without major service disruption to platform services.
-
-### Dependency Security
-
-Software supply chain security is ensured through rigorous dependency management:
-- **Dependency Scanning**: Use of automated audit tools (`pip-audit` or `safety` for Python packages, and Trivy / Dependabot for Docker images) integrated into development workflows.
-- **Vulnerability Identification**: Continuous analysis of CVEs (Common Vulnerabilities and Exposures) across all `requirements.txt` files (`api`, `scheduler`, root) and container images.
-- **Package Updates**: Technology watch and periodic dependency updates to benefit from security patches and stable versions.
-- **Blocking Critical Vulnerabilities**: Automatic CI/CD pipeline failure upon detection of a critical or high severity vulnerability (high CVSS), preventing any merge or deployment of vulnerable code.
-
-### Docker Image Scanning
-
-Deployed container security is reinforced by a systematic image scanning policy:
-- **Image Scanning**: Use of cutting-edge container scanning tools (such as **Trivy** or Docker Scan) to inspect all layers of built images (e.g., `trivy image lab-kali:latest`).
-- **CVE Detection**: Automated identification of all known vulnerabilities (CVEs) present in system packages (`apt`, `apk`, `apk-tools`) and embedded application libraries.
-- **Security Thresholds**: Configuration of strict acceptance thresholds in the CI/CD pipeline (e.g., build failure upon presence of vulnerabilities classified as `CRITICAL` or `HIGH`).
-- **Vulnerability Remediation**: Immediate application of security patches (base image updates, rebuild with updated packages, or Dockerfile fixes) prior to production release.
-
-### Secret Detection
-
-To prevent accidental leakage of sensitive information in source code, the platform implements strict secret detection controls:
-- **Git Scanning**: Use of repository history analysis tools (such as **Gitleaks** or **TruffleHog**) to scan all commits and detect past or current leaks.
-- **Credential Detection**: Automated identification of plaintext passwords, database connection strings, and administrative credentials.
-- **Token Detection**: Search for API keys, static JWT authentication tokens, OAuth secrets, and SSH private keys (`.key`).
-- **Blocking Secrets in Repository**: Integration of *pre-commit* hooks (via Gitleaks) that instantly block any local commit containing secrets before it can be pushed to the remote repository.
-
-### Integration Tests
-
-The platform features a complete integration test suite validating component interoperability:
-- **API + PostgreSQL**: Persistence layer validation via SQLAlchemy and Alembic, ensuring compliance of schemas, relationships, and transactions (integration tests in `api/tests/test_integration.py`).
-- **API + Docker**: Validation of interactions between the API (via `ContainerManager`) and the Docker daemon (`/var/run/docker.sock`) for container creation and management.
-- **Scheduler + Workers**: Tests of the scheduler daemon and synchronization of cores, RAM, and heartbeats with worker agents on the cluster.
-- **Reservation + Docker**: End-to-end validation of the ephemeral lab lifecycle (`test_traefik_proxy.py` script), including container provisioning, Traefik dynamic routing (HTTPS), and automatic post-deletion purging.
-
-### Resilience Tests
-
-To guarantee high availability and robustness of the platform against incidents, several resilience scenarios are tested and handled:
-- **Worker DOWN**: Automatic detection of unreachable workers (heartbeat interruption beyond tolerance threshold) and immediate status transition to `OFFLINE` to prevent new assignments.
-- **Container DOWN**: Handling of accidental stops, container crashes, or creation failures, with event logging (`ReservationEvent`) and transition to `FAILED` status or recovery.
-- **Recovery**: Automated incident recovery by the Scheduler (cleanup of orphaned resources, release of allocated CPU/RAM quotas on workers, and expiration of expired or timed-out reservations).
-- **Re-scheduling**: Dynamic reallocation of queues (`PENDING`) and switching labs to a healthy and available worker when the infrastructure undergoes a disturbance or node failover.
-
-### Build Stage (CI/CD Pipeline)
-
-The CI/CD build stage executes the following steps in an isolated and reproducible manner:
-- **Install Dependencies**: Download and clean installation of Python packages required for the API and Scheduler from locked `requirements.txt` files.
-- **Build Application**: Syntactic validation, structural tests, and preparation of FastAPI application modules and synchronization daemons.
-- **Build Docker Image**: Assembly of container images (e.g., `infra/dockerfiles/lab-kali/Dockerfile`) via Docker Buildx applying minimization rules and absence of secrets.
-
-### Test Stage (CI/CD Pipeline)
-
-The CI/CD test stage automatically validates non-regression and code correctness prior to any deployment:
-- **Unit Tests**: Unit validation of security functions, password hashing (Bcrypt), creation/decoding of JWT tokens, and business logic.
-- **API Tests**: Exhaustive validation of all REST endpoints (`/health`, `/users`, `/users/login`, `/machines`, `/workers`, `/reservations`) via the FastAPI test client.
-- **Integration Tests**: Execution of the integration suite (`api/tests/test_integration.py`) connected to an ephemeral PostgreSQL service to validate transactions and persistence.
-
-### Security Stage (CI/CD Pipeline)
-
-The security stage automates vulnerability and integrity checks on each build:
-- **SAST (Static Application Security Testing)**: Static source code analysis (via Ruff) to detect code flaws, syntax errors, and poor development practices.
-- **Dependency Scan**: Automated audit of Python dependencies (via `pip-audit`) to identify known CVEs in third-party libraries.
-- **Secret Scan**: Analysis of the repository and commits (via Gitleaks) to detect and block any accidental leakage of passwords, tokens, or private keys.
-- **Container Scan**: In-depth analysis of built Docker images (via Trivy) with automatic pipeline failure upon detection of critical vulnerabilities (`CRITICAL` or `HIGH`).
-
-### Registry Stage (CI/CD Pipeline)
-
-The registry stage manages secure publication of validated container images:
-- **Tag Image**: Application of multiple tags (e.g., `latest` and unique commit identifier `git sha`) on the Kali Linux image.
-- **Publish Image**: Authenticated connection to the remote container registry (GitHub Container Registry - GHCR) and push of images validated by tests and security audits.
-- **Manage Versions**: Rigorous version tracking and build traceability ensuring no unaudited image is referenced in production.
-
-### Verification Stage (CI/CD Pipeline)
-
-The post-deployment verification stage validates infrastructure health in production:
-- **Healthcheck**: Querying the `/health` endpoint to verify API status and PostgreSQL availability.
-- **API Verification**: Testing main routes and authentication.
-- **Docker Verification**: Checking daemon status and active containers on worker clusters.
-- **Traefik Verification**: Testing router resolution, TLS certificates, and HTTPS dynamic routing.
-- **Deployment Validation**: Global validation of the smoke test report confirming continuous deployment success.
-
-## Useful Commands
-
+1. Boot all virtual machines:
 ```bash
-# Start infrastructure
-docker compose up -d
-
-# Stop infrastructure
-docker compose down
-
-# View logs
-docker compose logs -f traefik
-docker compose logs -f postgres
-
-# Run comprehensive test suite (Unit, API, Integration, Security, Resilience)
-.\api\.venv\Scripts\python.exe test_all_criteria.py
-
-# Reset DB (⚠️ deletes everything)
-docker compose down -v
-docker compose up -d
-cd api && alembic upgrade head && python seed.py
+vagrant up
 ```
+
+2. Deploy complete infrastructure with Ansible:
+```bash
+cd ansible
+ansible-playbook -i inventory.ini setup.yml
+```
+
+The Ansible playbook performs the following tasks:
+- Installs Docker CE and Compose plugin on all cluster nodes.
+- Synchronizes project sources from host to the controller.
+- Sets up environment files and SSL certificates.
+- Runs PostgreSQL and Traefik via Docker Compose.
+- Executes Alembic migrations and database seeding.
+- Deploys and enables `lab-api.service` and `lab-scheduler.service` on the controller.
+- Deploys and enables `worker-agent.service` on each worker node.
+
+## CLI Usage Guide (labctl)
+
+The CLI tool is located at `cli/labctl.py`.
+
+### 1. User Authentication
+```bash
+# Login (seeded accounts: user@lab.local / user12345 or admin@lab.local / admin12345)
+python cli/labctl.py login user@lab.local user12345
+
+# Logout
+python cli/labctl.py logout
+```
+
+### 2. View Machine Catalog
+```bash
+python cli/labctl.py machines
+```
+
+### 3. Create a Machine Template
+```bash
+python cli/labctl.py create-machine --name debian-tools --image debian:12 --cpu 1 --ram 512 --port 80
+```
+
+### 4. Reserve an Ephemeral Machine
+```bash
+# Reserve by machine name
+python cli/labctl.py reserve --machine kali --cpu 1 --ram 512 --duration 30
+
+# Reserve by image name
+python cli/labctl.py reserve --image nginxdemos/hello --duration 15
+
+# Reserve by template ID
+python cli/labctl.py reserve --machine-id 1 --cpu 1 --ram 512 --duration 60
+```
+
+### 5. List and Inspect Reservations
+```bash
+# List all personal reservations with remaining time
+python cli/labctl.py list
+
+# View detailed status and access information
+python cli/labctl.py status 1
+```
+
+### 6. Connect and Command Inside Containers
+```bash
+# Connect via Traefik reverse proxy (checks HTTPS connectivity and prints access details)
+python cli/labctl.py connect 1 --wait
+
+# Open container in default web browser
+python cli/labctl.py connect 1 --browser
+
+# Execute commands directly inside the container (interactive shell)
+python cli/labctl.py exec 1 /bin/bash
+python cli/labctl.py exec 1 uname -a
+
+# Connect directly via SSH (for Kali or Linux containers)
+python cli/labctl.py ssh 1
+# Manual SSH alternative:
+ssh root@lab-1.lab.local -p 22
+```
+
+### 7. Lifecycle Controls and Release
+```bash
+# Stop active reservation
+python cli/labctl.py stop 1
+
+# Start stopped reservation
+python cli/labctl.py start 1
+
+# Delete and release resources immediately
+python cli/labctl.py delete 1
+```
+
+## Resilience and Auto-Healing
+
+The scheduler includes continuous health monitoring and self-healing:
+
+- Worker Offline Detection: Workers that miss heartbeats for more than 30 seconds are automatically marked `OFFLINE`.
+- Container Crash Detection: If an ephemeral container is killed or crashes (`docker kill`), the scheduler detects the failure within seconds.
+- Auto-Repair: The scheduler reschedules the impacted reservation onto an available healthy worker, recreates the container, re-applies Traefik reverse proxy labels, and updates the database records.
+
+To test auto-repair live:
+1. Reserve a machine: `python cli/labctl.py reserve --machine kali`.
+2. Wait until status is `RUNNING` via `python cli/labctl.py list`.
+3. Kill the container manually: `docker kill lab-reservation-1`.
+4. Observe the scheduler logs: it detects the crash and automatically recovers the container.
+
+## Web Interfaces and Dashboards
+
+- Interactive REST API Documentation: http://localhost:8000/docs
+- Traefik Routing Dashboard: http://localhost:8080/dashboard/
+- Ephemeral Lab Instance: https://lab-<id>.lab.local
+
+## Running Automated Tests
+
+Run the full pytest suite (Unit, API, Scheduler, CLI, and Worker Agent):
+```bash
+.\api\.venv\Scripts\python.exe -m pytest api/tests/ scheduler/tests/ cli/tests/ worker_agent/test_agent_endpoints.py
+```
+
+Run the complete evaluation suite verifying all project criteria:
+```bash
+.\api\.venv\Scripts\python.exe test_all_criteria.py
+```
+
+## DevSecOps Pipeline
+
+The repository includes a GitHub Actions pipeline (`.github/workflows/ci.yml`) covering:
+- Static Code Analysis (SAST): Ruff linting.
+- Dependency Security: Pip-audit checking Python packages for CVEs.
+- Secret Detection: Gitleaks scanning commits for leaked credentials.
+- Multi-component Integration Tests: Automated test execution against a test database.
+- Container Image Scan: Trivy scanning Docker images for high and critical CVEs.
+- Container Registry Publish: Automated build and push to GitHub Container Registry (GHCR).
