@@ -84,6 +84,8 @@ def process_pending(batch_size: int = 10) -> int:
                     processed += 1
 
                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     print(f"[scheduler] ERREUR reservation #{r.id}: {e}")
                     r.status = "FAILED"
                db.commit()

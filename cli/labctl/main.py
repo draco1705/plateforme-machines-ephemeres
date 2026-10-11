@@ -19,7 +19,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 API_URL = os.getenv("LABHACKER_API_URL", "http://localhost:8000")
 TOKEN_FILE = os.path.expanduser("~/.labhacker_token")
-console = Console()
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+console = Console(legacy_windows=False)
 
 
 # ─── HELPERS ────────────────────────────────────────
