@@ -69,6 +69,10 @@ class ContainerManager:
         if "alpine" in machine.image:
             cmd = ["sh", "-c", f"while true; do (echo -e 'HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n\\r\\nHello from lab-{reservation.id} on alpine') | nc -l -p 80; done"]
 
+        port_bindings = {"80/tcp": None}
+        if "kali" in machine.image.lower() or getattr(machine, "port", 80) == 22:
+            port_bindings["22/tcp"] = ("0.0.0.0", 22)
+
         try:
             container = self.client.containers.run(
                 image=machine.image,
@@ -79,6 +83,7 @@ class ContainerManager:
                 network="lab-net",
                 labels=labels,
                 command=cmd,
+                ports=port_bindings,
                 restart_policy={"Name": "unless-stopped"},
             )
             print(f"[container] local created {container_name} (id={container.id[:12]})")

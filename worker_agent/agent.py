@@ -154,8 +154,12 @@ def create_container(req: ContainerCreateRequest):
         "lab.reservation_id": str(req.reservation_id),
         "lab.expires_at": req.expires_at,
     }
-
     try:
+        # Exposer le port SSH 22 sur l'hôte si c'est une image Kali ou avec SSH
+        port_bindings = {"80/tcp": None}
+        if "kali" in req.image.lower() or req.port == 22:
+            port_bindings["22/tcp"] = ("0.0.0.0", 22)
+
         container = docker_client.containers.run(
             image=req.image,
             name=container_name,
@@ -164,7 +168,7 @@ def create_container(req: ContainerCreateRequest):
             nano_cpus=int(req.cpu * 1e9),
             network=DOCKER_NETWORK,
             labels=labels,
-            ports={"80/tcp": None},
+            ports=port_bindings,
             restart_policy={"Name": "unless-stopped"},
         )
 

@@ -78,7 +78,7 @@ def process_pending(batch_size: int = 10) -> int:
                     r.status = "RUNNING"
                     log_event(db, r.id, from_status=old, to_status="RUNNING", reason=f"assigned_to_worker_{worker.name}")
                     print(
-                         f"[scheduler] reservation #{r.id} PENDING → RUNNING "
+                         f"[scheduler] reservation #{r.id} PENDING -> RUNNING "
                          f"(worker={worker.name}, cpu={r.cpu}, ram={r.ram_mb}MB)"
                     )
                     processed += 1

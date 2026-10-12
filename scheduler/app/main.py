@@ -1,5 +1,13 @@
 import signal
+import sys
 import time
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 from app.config import settings
 from app.jobs.auto_heal import check_and_auto_heal
