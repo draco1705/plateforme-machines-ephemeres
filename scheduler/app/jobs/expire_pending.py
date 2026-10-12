@@ -1,4 +1,8 @@
-from datetime import UTC, datetime, timedelta, timezone
+try:
+    from datetime import UTC, datetime, timedelta, timezone
+except ImportError:
+    from datetime import datetime, timedelta, timezone
+    UTC = timezone.utc
 
 from app.database import SessionLocal
 from app.models.reservation import Reservation

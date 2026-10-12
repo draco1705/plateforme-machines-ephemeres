@@ -1,4 +1,8 @@
-from datetime import UTC, datetime, timezone
+try:
+    from datetime import UTC, datetime, timezone
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc
 
 from app.database import SessionLocal
 from app.models.machine import Machine
@@ -76,6 +80,7 @@ def process_pending(batch_size: int = 10) -> int:
                     r.container_id = container_id
                     r.access_url = f"https://lab-{r.id}.lab.local"
                     r.status = "RUNNING"
+                    db.flush()
                     log_event(db, r.id, from_status=old, to_status="RUNNING", reason=f"assigned_to_worker_{worker.name}")
                     print(
                          f"[scheduler] reservation #{r.id} PENDING -> RUNNING "

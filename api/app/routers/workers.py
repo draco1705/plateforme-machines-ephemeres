@@ -1,5 +1,8 @@
-# app/routers/workers.py
-from datetime import UTC, datetime, timedelta, timezone
+try:
+    from datetime import UTC, datetime, timedelta, timezone
+except ImportError:
+    from datetime import datetime, timedelta, timezone
+    UTC = timezone.utc
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session

@@ -305,7 +305,7 @@
 
     - name: Copy agent.py
       copy:
-        src: "{{ inventory_dir }}/../worker_agent/agent.py"
+        src: /vagrant/worker_agent/agent.py
         dest: "{{ agent_dir }}/agent.py"
         owner: vagrant
         group: vagrant

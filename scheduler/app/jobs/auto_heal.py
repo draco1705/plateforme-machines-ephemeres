@@ -1,4 +1,8 @@
-from datetime import UTC, datetime, timedelta, timezone
+try:
+    from datetime import UTC, datetime, timedelta, timezone
+except ImportError:
+    from datetime import datetime, timedelta, timezone
+    UTC = timezone.utc
 
 from app.database import SessionLocal
 from app.models.machine import Machine
@@ -90,8 +94,9 @@ def check_and_auto_heal(batch_size: int = 10) -> int:
                     new_worker.cpu_used += r.cpu
                     new_worker.ram_used_mb += r.ram_mb
                     new_worker.container_count += 1
-                log_event(db, r.id, from_status="RUNNING", to_status="RUNNING", reason="auto_repaired_successfully")
-                print(f"[scheduler] Auto-réparation réussie pour #{r.id} (nouveau conteneur: {new_container_id[:12]})")
+                db.flush()
+                log_event(db, r.id, from_status="RUNNING", to_status="RUNNING", reason=f"auto_repaired_on_{new_worker.name if new_worker else 'local'}")
+                print(f"[scheduler] Auto-réparation réussie pour #{r.id} sur worker {new_worker.name if new_worker else 'local'} (conteneur: {new_container_id[:12]})")
                 repaired_count += 1
             except ContainerError as e:
                 print(f"[scheduler] Échec auto-réparation pour #{r.id}: {e.message}")

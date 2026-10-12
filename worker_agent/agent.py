@@ -191,6 +191,20 @@ def create_container(req: ContainerCreateRequest):
         raise HTTPException(500, {"code": "RUN_FAILED", "message": str(e)})
 
 
+@app.get("/containers/{container_id}/status")
+def get_single_container_status(container_id: str):
+    """Vérifier le statut d'un conteneur spécifique."""
+    if docker_client is None:
+        return {"status": "docker_down"}
+    try:
+        c = docker_client.containers.get(container_id)
+        return {"status": c.status}
+    except docker.errors.NotFound:
+        return {"status": "not_found"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.delete("/containers/{container_id}", status_code=204)
 def delete_container(container_id: str):
     """Scheduler appelle pour détruire un conteneur."""

@@ -1,4 +1,8 @@
-from datetime import UTC, datetime, timedelta
+try:
+    from datetime import UTC, datetime, timedelta, timezone
+except ImportError:
+    from datetime import datetime, timedelta, timezone
+    UTC = timezone.utc
 
 import bcrypt
 from jose import jwt
