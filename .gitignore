@@ -39,4 +39,4 @@ Thumbs.db
 docker-compose.override.yml
 
 test.txt
-ansible/inventory.wsl.ini
+#ansible/inventory.wsl.ini

@@ -28,7 +28,7 @@ def main():
           
           # Machine
           machines = [
-               {"name": "kali",   "image": "kalilinux/kali-rolling", "cpu_min": 1, "ram_min_mb": 512, "port": 80},
+               {"name": "kali",   "image": "kalilinux/kali-rolling", "cpu_min": 1, "ram_min_mb": 512, "port": 22},
                {"name": "nginx",  "image": "nginxdemos/hello",       "cpu_min": 1, "ram_min_mb": 256, "port": 80},
                {"name": "python", "image": "python:3.12-alpine",     "cpu_min": 1, "ram_min_mb": 256, "port": 8000},
                {"name": "alpine", "image": "alpine:3.19",            "cpu_min": 1, "ram_min_mb": 256, "port": 80},

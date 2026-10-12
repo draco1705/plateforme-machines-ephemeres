@@ -200,9 +200,7 @@
       become: true
       become_user: vagrant
 
-     # ─────────────────────────────────────────────────────
-    # F8 : Generate SSL certificates in Controller VM
-    # ─────────────────────────────────────────────────────
+    # Generate SSL certificates in Controller VM
     - name: Ensure certs directory exists
       file:
         path: "{{ project_dir }}/certs"
@@ -298,23 +296,6 @@
         ('Started' in compose_result.stdout or 'Started' in compose_result.stderr) or
         ('Recreated' in compose_result.stdout or 'Recreated' in compose_result.stderr)
 
-    # - name: Wait for Postgres to be ready
-    #   shell: |
-    #     for i in {1..30}; do
-    #       status=$(docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres 2>/dev/null)
-    #       if [ "$status" = "healthy" ]; then
-    #         echo "healthy"
-    #         exit 0
-    #       fi
-    #       sleep 2
-    #     done
-    #     echo "timeout"
-    #     exit 1
-    #   become_user: vagrant
-    #   register: pg_wait
-    #   changed_when: false
-    #   failed_when: pg_wait.stdout | trim != "healthy"
-
     - name: Wait for Postgres to be healthy
       command:
         cmd: docker inspect --format='{% raw %}{{.State.Health.Status}}{% endraw %}' lab-postgres
@@ -326,6 +307,69 @@
       changed_when: false
       failed_when: pg_health.stdout | trim != "healthy"
 
+    # Systemd services for API + Scheduler
+    - name: Create systemd unit for API
+      copy:
+        dest: /etc/systemd/system/lab-api.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker API
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ project_dir }}/api
+          EnvironmentFile={{ project_dir }}/api/.env
+          ExecStart={{ project_dir }}/api/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/lab-api.log
+          StandardError=append:/var/log/lab-api.err
+
+          [Install]
+          WantedBy=multi-user.target
+      become: true
+
+    - name: Create systemd unit for Scheduler
+      copy:
+        dest: /etc/systemd/system/lab-scheduler.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Lab Hacker Scheduler
+          After=network.target docker.service lab-api.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          User=vagrant
+          Group=vagrant
+          WorkingDirectory={{ project_dir }}/scheduler
+          EnvironmentFile={{ project_dir }}/scheduler/.env
+          ExecStart={{ project_dir }}/scheduler/.venv/bin/python -m app.main
+          Restart=always
+          RestartSec=5
+          StandardOutput=append:/var/log/lab-scheduler.log
+          StandardError=append:/var/log/lab-scheduler.err
+
+          [Install]
+          WantedBy=multi-user.target
+      become: true
+
+    - name: Reload systemd, enable and start lab services
+      systemd:
+        name: "{{ item }}"
+        daemon_reload: true
+        state: restarted
+        enabled: true
+      loop:
+        - lab-api
+        - lab-scheduler
+      become: true
 
     - name: Check running containers
       command:
@@ -446,3 +490,34 @@
     - name: Display worker health
       debug:
         msg: "{{ inventory_hostname }}: {{ worker_health.json }}"
+
+- name: Build custom lab images
+  hosts: workers
+  become: true
+
+  tasks:
+    - name: Build lab-kali:1.0 image
+      shell: |
+        cd /tmp
+        cat > Dockerfile.lab-kali <<'EOF'
+        FROM kalilinux/kali-rolling
+        RUN apt-get update && apt-get install -y openssh-server passwd && apt-get clean && rm -rf /var/lib/apt/lists/*
+        RUN echo 'root:kali' | chpasswd
+        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        RUN mkdir -p /var/run/sshd
+        EXPOSE 22
+        CMD ["/usr/sbin/sshd", "-D"]
+        EOF
+        docker build -t lab-kali:1.0 -f Dockerfile.lab-kali .
+      register: build_result
+      changed_when: "'Successfully tagged' in build_result.stdout"
+
+    - name: Verify image exists
+      shell: docker image inspect lab-kali:1.0 --format '{{ "{{.Id}}" }}'
+      register: image_check
+      changed_when: false
+
+    - name: Display image ID
+      debug:
+        msg: "{{ inventory_hostname }}: lab-kali:1.0 = {{ image_check.stdout[:12] }}"

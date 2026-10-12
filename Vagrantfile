@@ -19,6 +19,7 @@ EOF
   config.vm.define "controller" do |controller|
     controller.vm.hostname = "controller"
     controller.vm.network "private_network", ip: "192.168.56.10"
+    controller.vm.network "forwarded_port", guest: 22, host: 2200, id: "ssh", auto_correct: true
     controller.vm.provider "virtualbox" do |vb|
       vb.memory = "2048"
       vb.cpus = 2
