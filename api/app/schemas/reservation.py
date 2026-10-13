@@ -19,6 +19,7 @@ class ReservationOut(ORMBase):
     user_id: int
     machine_id: int
     worker_id: int | None
+    worker_name: str | None = None
     container_id: str | None
     cpu: int
     ram_mb: int

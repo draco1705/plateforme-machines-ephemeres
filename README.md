@@ -108,7 +108,7 @@ python cli/labctl.py connect <reservation_id> --wait
 python cli/labctl.py exec <reservation_id> /bin/bash
 
 # SSH directly into the container:
-python cli/labctl.py ssh <reservation_id>
+python cli/labctl.py ssh <reservation_id> 
 ```
 
 ### 6. Stop and Release

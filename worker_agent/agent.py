@@ -155,10 +155,13 @@ def create_container(req: ContainerCreateRequest):
         "lab.expires_at": req.expires_at,
     }
     try:
-        # Exposer le port SSH 22 sur l'hôte si c'est une image Kali ou avec SSH
         port_bindings = {"80/tcp": None}
         if "kali" in req.image.lower() or req.port == 22:
-            port_bindings["22/tcp"] = ("0.0.0.0", 22)
+            port_bindings["22/tcp"] = None
+
+        cmd = None
+        if "alpine" in req.image.lower() or "kali" in req.image.lower():
+            cmd = ["sh", "-c", "sleep infinity"]
 
         container = docker_client.containers.run(
             image=req.image,
@@ -169,6 +172,7 @@ def create_container(req: ContainerCreateRequest):
             network=DOCKER_NETWORK,
             labels=labels,
             ports=port_bindings,
+            command=cmd,
             restart_policy={"Name": "unless-stopped"},
         )
 
@@ -203,6 +207,25 @@ def get_single_container_status(container_id: str):
         return {"status": "not_found"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@app.post("/containers/{container_id}/exec")
+def exec_in_container(container_id: str, payload: dict):
+    """Exécute une commande dans le conteneur et renvoie la sortie."""
+    if docker_client is None:
+        raise HTTPException(500, "Docker indisponible")
+    cmd = payload.get("cmd", ["/bin/sh"])
+    try:
+        c = docker_client.containers.get(container_id)
+        exec_res = c.exec_run(cmd)
+        return {
+            "exit_code": exec_res.exit_code,
+            "output": exec_res.output.decode("utf-8", errors="replace"),
+        }
+    except docker.errors.NotFound:
+        raise HTTPException(404, "Conteneur non trouvé")
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @app.delete("/containers/{container_id}", status_code=204)

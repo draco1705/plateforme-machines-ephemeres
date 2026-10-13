@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.machine import Machine
 from app.models.reservation import Reservation
 from app.models.reservation_event import ReservationEvent
+from app.models.worker import Worker
 from app.schemas.reservation import (
     ReservationCreate,
     ReservationEventOut,
@@ -103,6 +104,27 @@ def stop_reservation(rid: int, db: Session = Depends(get_db), user=Depends(curre
         raise HTTPException(409, "Réservation non active")
     # TODO appeler Worker Agent
     return r
+
+@router.post("/{rid}/exec")
+def exec_reservation(rid: int, payload: dict, db: Session = Depends(get_db), user=Depends(current_user)):
+    """Exécute une commande dans le conteneur via son worker."""
+    import httpx
+    r = db.get(Reservation, rid)
+    if not r or r.user_id != user.id:
+        raise HTTPException(404)
+    if r.status != "RUNNING" or not r.container_id:
+        raise HTTPException(409, "Réservation non active")
+
+    worker = db.get(Worker, r.worker_id) if r.worker_id else None
+    if not worker:
+        raise HTTPException(502, "Worker introuvable")
+
+    url = f"http://{worker.ip}:{worker.port}/containers/{r.container_id}/exec"
+    try:
+        resp = httpx.post(url, json=payload, timeout=30.0)
+        return resp.json()
+    except Exception as e:
+        raise HTTPException(502, f"Erreur communication worker : {e}")
 
 @router.get("/{rid}/events", response_model=list[ReservationEventOut])
 def get_events(rid: int, db: Session = Depends(get_db), user=Depends(current_user)):

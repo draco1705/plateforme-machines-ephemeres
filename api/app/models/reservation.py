@@ -10,6 +10,8 @@ from sqlalchemy import (
     func,
 )
 
+from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
@@ -39,3 +41,9 @@ class Reservation(Base):
     start_time   = Column(DateTime(timezone=True), server_default=func.now())
     end_time     = Column(DateTime(timezone=True), nullable=False)
     access_url   = Column(String(255), nullable=True)
+
+    worker = relationship("Worker", foreign_keys=[worker_id], lazy="joined")
+
+    @property
+    def worker_name(self) -> str | None:
+        return self.worker.name if self.worker else None

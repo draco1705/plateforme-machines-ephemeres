@@ -139,6 +139,38 @@ def cmd_machines(args):
     console.print(table)
 
 
+def cmd_workers(args):
+    r = requests.get(f"{API_URL}/workers", headers=auth_headers())
+    if r.status_code != 200:
+        print_error(f"Échec récupération workers : {r.status_code} {r.text}")
+        sys.exit(1)
+    workers = r.json()
+    if not workers:
+        print_info("Aucun worker enregistré.")
+        return
+    table = Table(title="État des Workers (Cluster)", box=box.ROUNDED)
+    table.add_column("Nom", style="cyan")
+    table.add_column("IP", style="dim")
+    table.add_column("Statut")
+    table.add_column("CPU", justify="right")
+    table.add_column("RAM", justify="right")
+    table.add_column("Max Conteneurs", justify="right")
+    for w in workers:
+        st = w.get("status", "UNKNOWN")
+        color = "green" if st == "AVAILABLE" else ("yellow" if st == "BUSY" else "red")
+        cpu_str = f"{w.get('cpu_used', 0)} / {w.get('cpu_total', 0)}"
+        ram_str = f"{w.get('ram_used_mb', 0)} / {w.get('ram_total_mb', 0)} MB"
+        table.add_row(
+            w.get("name", "?"),
+            w.get("ip", "?"),
+            f"[{color}]{st}[/{color}]",
+            cpu_str,
+            ram_str,
+            str(w.get("max_containers", 4)),
+        )
+    console.print(table)
+
+
 def cmd_create_machine(args):
     """Créer un template de machine dans le catalogue."""
     payload = {
@@ -220,7 +252,8 @@ def cmd_reserve(args):
 
 
 def cmd_list(args):
-    r = requests.get(f"{API_URL}/reservations", headers=auth_headers())
+    headers = auth_headers()
+    r = requests.get(f"{API_URL}/reservations", headers=headers)
     if r.status_code != 200:
         print_error(f"{r.status_code} {r.text}")
         sys.exit(1)
@@ -230,10 +263,19 @@ def cmd_list(args):
         print_info("Aucune réservation.")
         return
 
+    # Map worker_id to worker_name as fallback if worker_name not returned directly
+    workers_map = {}
+    try:
+        rw = requests.get(f"{API_URL}/workers", headers=headers, timeout=3)
+        if rw.status_code == 200:
+            workers_map = {w.get("id"): w.get("name") for w in rw.json()}
+    except Exception:
+        pass
+
     table = Table(title="Mes réservations", box=box.ROUNDED)
     table.add_column("ID", style="cyan", justify="right")
     table.add_column("Machine", justify="right")
-    table.add_column("Worker", justify="right")
+    table.add_column("Worker", justify="center")
     table.add_column("CPU", justify="right")
     table.add_column("RAM", justify="right")
     table.add_column("Status")
@@ -252,10 +294,11 @@ def cmd_list(args):
         st = res["status"]
         color = status_color.get(st, "white")
         rem = format_remaining_time(res.get("end_time"))
+        worker_disp = res.get("worker_name") or workers_map.get(res.get("worker_id")) or (f"worker{res['worker_id']}" if res.get("worker_id") else "-")
         table.add_row(
             str(res["id"]),
             str(res.get("machine_id", "?")),
-            str(res.get("worker_id") or "-"),
+            str(worker_disp),
             str(res["cpu"]),
             f"{res['ram_mb']} MB",
             f"[{color}]{st}[/{color}]",
@@ -266,9 +309,10 @@ def cmd_list(args):
 
 
 def cmd_status(args):
+    headers = auth_headers()
     r = requests.get(
         f"{API_URL}/reservations/{args.id}",
-        headers=auth_headers(),
+        headers=headers,
     )
     if r.status_code != 200:
         print_error(f"{r.status_code} {r.text}")
@@ -276,9 +320,23 @@ def cmd_status(args):
 
     res = r.json()
     rem = format_remaining_time(res.get("end_time"))
+    worker_disp = res.get("worker_name")
+    if not worker_disp and res.get("worker_id"):
+        try:
+            rw = requests.get(f"{API_URL}/workers", headers=headers, timeout=3)
+            if rw.status_code == 200:
+                for w in rw.json():
+                    if w.get("id") == res.get("worker_id"):
+                        worker_disp = w.get("name")
+                        break
+        except Exception:
+            pass
+    if not worker_disp:
+        worker_disp = f"worker{res['worker_id']}" if res.get("worker_id") else "-"
     panel = Panel.fit(
         f"[bold]Status[/bold]        : {res['status']}\n"
         f"[bold]Machine ID[/bold]    : {res.get('machine_id')}\n"
+        f"[bold]Worker[/bold]        : {worker_disp}\n"
         f"[bold]Worker ID[/bold]     : {res.get('worker_id') or '-'}\n"
         f"[bold]Container ID[/bold]  : {res.get('container_id') or '-'}\n"
         f"[bold]CPU[/bold]           : {res['cpu']}\n"
@@ -356,8 +414,9 @@ def cmd_connect(args):
         sys.exit(1)
 
     access_url = res.get("access_url") or f"https://lab-{args.id}.lab.local"
+    worker_disp = res.get("worker_name") or (f"worker{res['worker_id']}" if res.get("worker_id") else "local")
     console.print(f"[bold green]✓ Conteneur actif ![/bold green]")
-    console.print(f"  • Worker       : [cyan]{res.get('worker_id') or 'local'}[/cyan]")
+    console.print(f"  • Worker       : [cyan]{worker_disp}[/cyan]")
     console.print(f"  • Container ID : [cyan]{res.get('container_id', '')[:12]}[/cyan]")
     console.print(f"  • URL Proxy    : [bold underline cyan]{access_url}[/bold underline cyan]")
 
@@ -414,45 +473,83 @@ def cmd_connect(args):
 def cmd_exec(args):
     """Exécute une commande ou démarre un shell directement dans le conteneur."""
     headers = auth_headers()
-    r = requests.get(f"{API_URL}/reservations/{args.id}", headers=headers)
-    if r.status_code != 200:
-        print_error(f"Réservation #{args.id} introuvable : {r.status_code}")
-        sys.exit(1)
-    res = r.json()
-    if res.get("status") != "RUNNING":
-        print_error(f"La réservation #{args.id} n'est pas active (statut: {res.get('status')})")
-        sys.exit(1)
-
-    container_name = f"lab-reservation-{args.id}"
     cmd = args.cmd if args.cmd else ["/bin/sh"]
+    print_info(f"Exécution de '{' '.join(cmd)}' dans le conteneur du lab #{args.id}...")
 
+    # Appel au Control Plane (API) pour exécuter la commande sur le bon Worker
+    try:
+        r = requests.post(f"{API_URL}/reservations/{args.id}/exec", json={"cmd": cmd}, headers=headers, timeout=35)
+        if r.status_code == 200:
+            data = r.json()
+            out = data.get("output", "")
+            if out:
+                console.print(out.rstrip())
+            return
+        elif r.status_code == 404:
+            print_error(f"Réservation #{args.id} introuvable.")
+            return
+        elif r.status_code == 409:
+            print_error(f"La réservation #{args.id} n'est pas active (statut != RUNNING).")
+            return
+    except Exception as e:
+        pass
+
+    # Fallback local Docker si exécuté en mode local monocontrôleur
     import shutil
     import subprocess
+    container_name = f"lab-reservation-{args.id}"
     if shutil.which("docker"):
-        print_info(f"Exécution de {' '.join(cmd)} dans {container_name}...")
         try:
             subprocess.run(["docker", "exec", "-it", container_name, *cmd], check=False)
             return
-        except Exception as e:
-            print_error(f"Erreur docker exec : {e}")
+        except Exception:
+            pass
 
     host = f"lab-{args.id}.lab.local"
     print_info(f"Alternative SSH : ssh root@{host} -p 22 '{' '.join(cmd)}'")
 
 
 def cmd_ssh(args):
-    """Ouvre une session SSH interactive dans le conteneur."""
+    """Ouvre une session shell interactive directe dans le conteneur."""
+    headers = auth_headers()
+    r = requests.get(f"{API_URL}/reservations/{args.id}", headers=headers)
+    if r.status_code != 200:
+        print_error(f"Réservation #{args.id} introuvable.")
+        sys.exit(1)
+    res = r.json()
+    if res.get("status") != "RUNNING":
+        print_error(f"La réservation #{args.id} n'est pas active (statut: {res.get('status')}).")
+        sys.exit(1)
+
+    worker_name = res.get("worker_name")
+    worker_id = res.get("worker_id")
+    container_name = f"lab-reservation-{args.id}"
+    if not worker_name:
+        worker_name = "worker1"
+        if worker_id:
+            try:
+                rw = requests.get(f"{API_URL}/workers", headers=headers, timeout=5)
+                if rw.status_code == 200:
+                    for w in rw.json():
+                        if w.get("id") == worker_id:
+                            worker_name = w.get("name")
+                            break
+            except Exception:
+                worker_name = f"worker{worker_id}"
+
     import shutil
     import subprocess
-    host = f"lab-{args.id}.lab.local"
-    print_info(f"Connexion SSH vers root@{host} (mot de passe par défaut : kali)...")
-    if shutil.which("ssh"):
+    print_info(f"Connexion interactive au lab #{args.id} sur {worker_name}...")
+    if shutil.which("vagrant"):
         try:
-            subprocess.run(["ssh", "-o", "StrictHostKeyChecking=no", f"root@{host}", "-p", str(args.port)], check=False)
+            # Connecte directement le terminal interactif à la VM et au conteneur
+            subprocess.run(["vagrant", "ssh", worker_name, "-c", f"docker exec -it {container_name} bash || docker exec -it {container_name} sh"], check=False)
             return
         except Exception as e:
-            print_error(f"Erreur client SSH : {e}")
-    print_info(f"Commande SSH manuelle : ssh root@{host} -p {args.port} (mdp: kali)")
+            print_error(f"Erreur connexion : {e}")
+
+    host = f"lab-{args.id}.lab.local"
+    print_info(f"Alternative : labctl exec {args.id} <commande>")
 
 
 # ─── MAIN ───────────────────────────────────────────
@@ -476,6 +573,10 @@ def main():
     # machines
     p = sub.add_parser("machines", help="Lister les templates de machines")
     p.set_defaults(func=cmd_machines)
+
+    # workers
+    p = sub.add_parser("workers", help="Afficher l'état et les ressources des workers (Cluster)")
+    p.set_defaults(func=cmd_workers)
 
     # create-machine
     p = sub.add_parser("create-machine", help="Créer un nouveau template de machine")
@@ -515,7 +616,7 @@ def main():
     # exec
     p = sub.add_parser("exec", help="Exécuter une commande ou shell directement dans le conteneur")
     p.add_argument("id", type=int, help="ID de la réservation")
-    p.add_argument("cmd", nargs="*", default=["/bin/sh"], help="Commande à exécuter (défaut: /bin/sh)")
+    p.add_argument("cmd", nargs=argparse.REMAINDER, help="Commande à exécuter (ex: uname -a)")
     p.set_defaults(func=cmd_exec)
 
     # ssh

@@ -1,7 +1,7 @@
 # Scripts seed data for dev
 from app.core.security import hash_password
 from app.database import SessionLocal
-from app.models import Machine, User
+from app.models import Machine, User, Worker
 
 
 def main():
@@ -39,6 +39,17 @@ def main():
                if not db.query(Machine).filter_by(name=m["name"]).first():
                     db.add(Machine(**m))
                     print(f"Created machine: {m['name']}")
+
+          # Workers cluster
+          workers = [
+               {"name": "worker1", "ip": "192.168.56.11", "port": 8001, "cpu_total": 1, "ram_total_mb": 957, "max_containers": 4},
+               {"name": "worker2", "ip": "192.168.56.12", "port": 8001, "cpu_total": 1, "ram_total_mb": 957, "max_containers": 4},
+               {"name": "worker3", "ip": "192.168.56.13", "port": 8001, "cpu_total": 1, "ram_total_mb": 957, "max_containers": 4},
+          ]
+          for w in workers:
+               if not db.query(Worker).filter_by(name=w["name"]).first():
+                    db.add(Worker(**w))
+                    print(f"Created worker: {w['name']} ({w['ip']})")
 
           db.commit()
           print("\n Seed termine.")
