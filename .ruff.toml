@@ -10,6 +10,7 @@ ignore = [
     "S110",   # try-except-pass
     "EXE001", # Shebang not executable
     "EXE002", # File without shebang but executable
+    "UP017",  # datetime.UTC vs timezone.utc compatibility
 ]
 exclude = [
     ".venv",

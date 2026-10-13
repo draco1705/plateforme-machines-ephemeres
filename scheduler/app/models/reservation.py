@@ -1,6 +1,5 @@
 # app/models/reservation.py
 from app.database import Base
-from sqlalchemy.orm import relationship
 from sqlalchemy import (
     CheckConstraint,
     Column,
@@ -11,6 +10,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.orm import relationship
 
 
 class Reservation(Base):
